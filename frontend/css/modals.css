@@ -1,0 +1,93 @@
+/* AxonIQ — Modals: Change Password + Forgot Password */
+
+/* Shared modal overlay — both modals use this */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(11,31,58,0.80);
+  backdrop-filter: blur(5px);
+  display: none;                 /* hidden by default */
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.modal-overlay.open { display: flex; }  /* JS adds/removes .open */
+
+/* Change Password card */
+.changepw-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 36px;
+  width: 380px;
+  max-width: 95vw;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+}
+.changepw-card h3 {
+  font-family: 'Libre Baskerville', serif;
+  font-size: 18px;
+  color: var(--navy);
+  margin-bottom: 20px;
+}
+.changepw-error {
+  background: #FEE2E2; border: 1px solid #FECACA;
+  border-radius: 8px; padding: 9px 14px;
+  font-size: 13px; color: #B91C1C;
+  margin-bottom: 14px; display: none;
+}
+.changepw-success {
+  background: #D1FAE5; border: 1px solid #6EE7B7;
+  border-radius: 8px; padding: 9px 14px;
+  font-size: 13px; color: #065F46;
+  margin-bottom: 14px; display: none;
+}
+.changepw-cancel {
+  width: 100%; padding: 10px;
+  background: none; border: 1.5px solid var(--border);
+  border-radius: 9px; font-family: 'DM Sans', sans-serif;
+  font-size: 14px; color: var(--muted);
+  cursor: pointer; margin-top: 8px;
+  transition: background 0.15s;
+}
+.changepw-cancel:hover { background: var(--sand); }
+
+/* Forgot password success bar */
+.fp-success {
+  background: #D1FAE5; border: 1px solid #6EE7B7;
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 13px; color: #065F46;
+  margin-bottom: 14px; display: none;
+}
+
+/* Cancel button for forgot password steps */
+.fp-cancel-link {
+  width: 100%; padding: 10px;
+  background: none; border: 1.5px solid var(--border);
+  border-radius: 9px; font-family: 'DM Sans', sans-serif;
+  font-size: 14px; color: var(--muted);
+  cursor: pointer; margin-top: 8px;
+  display: block; text-align: center;
+  transition: background 0.15s;
+}
+.fp-cancel-link:hover { background: var(--sand); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  header          { padding: 10px 12px; gap: 8px; }
+  .header-text h1 { font-size: 15px; }
+  .header-text p  { display: none; }
+  .model-badge    { display: none; }
+  .user-name      { display: none; }
+  .bubble         { max-width: 88%; font-size: 13px; }
+  .chat-container { padding: 0 8px; }
+  #sidebar        { position: absolute; height: calc(100% - 59px); z-index: 20; box-shadow: 4px 0 16px rgba(0,0,0,.15); }
+  .input-area     { padding: 10px 0 14px; }
+  .msg-input      { font-size: 16px !important; padding: 10px 14px; }
+  .send-btn       { width: 44px; height: 44px; }
+  .disclaimer-bar { font-size: 10px; padding: 3px 10px; }
+  body            { -webkit-text-size-adjust: 100%; }
+}
+
+@media (max-width: 420px) {
+  .bubble { max-width: 95%; }
+  .avatar { width: 28px; height: 28px; font-size: 12px; }
+  header  { padding: 8px 10px; }
+}

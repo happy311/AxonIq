@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AxonIQ — AI Clinical Assistant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/variables.css?v=flair-only-1">
+  <link rel="stylesheet" href="/css/auth.css?v=flair-only-1">
+  <link rel="stylesheet" href="/css/shell.css?v=flair-only-1">
+  <link rel="stylesheet" href="/css/chat.css?v=flair-only-1">
+  <link rel="stylesheet" href="/css/modals.css?v=flair-only-1">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     AUTH OVERLAY
+     ══════════════════════════════════════════════════════════ -->
+<div id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-mark">AQ</div>
+      <div>
+        <h2>AxonIQ</h2>
+        <p>AI-Powered MS Clinical Assistant — Sign in to continue</p>
+      </div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin"    onclick="switchTab('login')">Sign In</button>
+      <button class="auth-tab"        id="tabRegister" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <div id="authError" class="auth-error"></div>
+
+    <div class="auth-field auth-register-only" id="fieldUsername">
+      <label>Username</label>
+      <input type="text" id="authUsername" placeholder="e.g. dr_smith" autocomplete="username">
+    </div>
+    <div class="auth-field">
+      <label id="emailLabel">Email or Username</label>
+      <input type="text" id="authEmail" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="auth-btn" id="authSubmitBtn" onclick="submitAuth()">Sign In</button>
+
+    <p id="forgotLink" style="text-align:center;margin-top:12px;font-size:13px;color:var(--muted);">
+      Forgot your password?
+      <a onclick="showForgotPassword()" style="color:var(--teal);cursor:pointer;font-weight:500;">Reset it here</a>
+    </p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     APP SHELL
+     ══════════════════════════════════════════════════════════ -->
+<div id="appShell">
+
+  <header>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+    <div class="logo-mark">AQ</div>
+    <div class="header-text">
+      <h1>AxonIQ</h1>
+      <p>AI-Powered MS Clinical Assistant · Agentic AI + RAG</p>
+    </div>
+    <div class="header-right">
+      <span class="model-badge">🤖 Agentic AI</span>
+      <div class="user-pill" onclick="toggleUserMenu()" role="button" aria-label="User menu">
+        <div class="user-avatar" id="headerAvatar">?</div>
+        <span class="user-name"  id="headerUsername">…</span>
+        <div class="user-dropdown" id="userDropdown">
+          <a onclick="newChat()">＋ New Chat</a>
+          <hr>
+          <a onclick="showChangePassword()">🔑 Change Password</a>
+          <a onclick="signOut()" class="danger">Sign Out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-body">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="sidebar-header">
+        <span>Chat History</span>
+        <button class="new-chat-side" onclick="newChat()">+ New</button>
+      </div>
+      <div class="session-list" id="sessionList">
+        <div class="sidebar-empty" id="sidebarEmpty">
+          No conversations yet.<br>Start a new chat!
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- Chat area -->
+    <div class="chat-wrapper">
+      <div class="disclaimer-bar">Clinical decision support only — not a diagnosis</div>
+      <div class="chat-container">
+
+        <div class="messages" id="messages">
+          <div class="session-loading" id="sessionLoading">
+            <div class="spin"></div> Loading conversation…
+          </div>
+          <div class="welcome" id="welcome">
+            <div class="welcome-icon">🧠</div>
+            <h2>MS Clinical AI Assistant</h2>
+            <p>Describe your neurological symptoms in plain language. I will conduct a structured clinical interview, identify MS-specific patterns, and recommend the appropriate workup.</p>
+            <div class="welcome-chips">
+              <div class="chip" onclick="sendChip('I have been having blurry vision in my left eye for 3 days and pain when I move my eye.')">👁️ Vision symptoms</div>
+              <div class="chip" onclick="sendChip('Every time I bend my neck forward I get an electric shock running down my spine.')">⚡ Lhermitte sign</div>
+              <div class="chip" onclick="sendChip('I woke up seeing double and my eyes feel jiggly. I also feel like I am on a boat when walking.')">👀 Double vision + balance</div>
+              <div class="chip" onclick="sendChip('I have numbness and tingling in my right arm and leg that started 2 days ago.')">🦾 Numbness / tingling</div>
+              <div class="chip" onclick="sendChip('I feel a tight squeezing band around my chest like a corset being pulled tight.')">🎗️ MS Hug</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <div class="input-controls">
+            <span class="session-id" id="sessionLabel"></span>
+            <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
+          </div>
+
+          <!-- ── MRI Upload Panel (FLAIR-only) ─────────────────────────────── -->
+          <div class="mri-panel" id="mriPanel" style="display:none">
+            <div class="mri-panel-header">
+              <span>🧲 MRI Scan Upload — FLAIR</span>
+              <button class="mri-panel-close" onclick="closeMriPanel()" title="Close">✕</button>
+            </div>
+            <div class="mri-slots">
+
+              <!-- Use div+onclick, NOT label wrapping input — avoids double-trigger on file dialog -->
+              <input type="file" id="flairFileInput" accept=".nii,.nii.gz" style="display:none"
+                     onchange="handleMriSlot(this,'flair')">
+              <div class="mri-slot" id="flairSlot" onclick="document.getElementById('flairFileInput').click()">
+                <div class="mri-slot-icon">🟦</div>
+                <div class="mri-slot-label">FLAIR</div>
+                <div class="mri-slot-name" id="flairName">Click to select .nii / .nii.gz</div>
+              </div>
+
+            </div>
+            <div class="mri-panel-footer">
+              <span class="mri-hint" id="mriHint">Select a FLAIR file to enable analysis</span>
+              <button class="mri-analyze-btn" id="mriAnalyzeBtn" onclick="submitMriPair()" disabled>
+                Analyze MRI
+              </button>
+            </div>
+          </div>
+          <!-- ─────────────────────────────────────────────────────────────── -->
+
+          <div class="input-row">
+            <button class="mri-upload-btn" onclick="toggleMriPanel()" id="mriToggleBtn"
+                    title="Upload FLAIR MRI scan" aria-label="Upload MRI NIfTI file">
+              🧲 MRI
+            </button>
+            <textarea
+              class="msg-input"
+              id="msgInput"
+              placeholder="Describe your symptoms… (Enter to send, Shift+Enter for new line)"
+              rows="1"
+              aria-label="Message input"
+            ></textarea>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /main-body -->
+</div><!-- /appShell -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL: Change Password
+     ══════════════════════════════════════════════════════════ -->
+<div id="changePwOverlay" class="modal-overlay">
+  <div class="changepw-card">
+    <h3>🔑 Change Password</h3>
+    <div id="changePwError"   class="changepw-error"></div>
+    <div id="changePwSuccess" class="changepw-success"></div>
+    <div class="auth-field">
+      <label>Current Password</label>
+      <input type="password" id="pwOld" placeholder="Your current password">
+    </div>
+    <div class="auth-field">
+      <label>New Password</label>
+      <input type="password" id="pwNew" placeholder="Min 6 characters">
+    </div>
+    <div class="auth-field">
+      <label>Confirm New Password</label>
+      <input type="password" id="pwConfirm" placeholder="Repeat new password">
+    </div>
+    <button class="auth-btn"        onclick="submitChangePassword()">Update Password</button>
+    <button class="changepw-cancel" onclick="hideChangePassword()">Cancel</button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL: Forgot Password (3-step OTP)
+     ══════════════════════════════════════════════════════════ -->
+<div id="forgotOverlay" class="modal-overlay">
+  <div class="auth-card" style="max-height:90vh;overflow-y:auto;">
+    <div class="auth-logo">
+      <div class="auth-logo-mark">AQ</div>
+      <div>
+        <h2 id="fpTitle">Reset Password</h2>
+        <p  id="fpSubtitle">Enter your registered email</p>
+      </div>
+    </div>
+
+    <div id="fpError"   class="auth-error"></div>
+    <div id="fpSuccess" class="fp-success"></div>
+
+    <div id="fpStep1">
+      <div class="auth-field">
+        <label>Email Address</label>
+        <input type="email" id="fpEmail" placeholder="your@email.com">
+      </div>
+      <button class="auth-btn" onclick="fpSendOTP()">Send Reset Code</button>
+      <button class="fp-cancel-link" onclick="hideForgotPassword()">Cancel</button>
+    </div>
+
+    <div id="fpStep2" style="display:none;">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7;">
+        A 6-digit code was sent to <strong id="fpEmailShow"></strong>.
+        Check your inbox and spam folder.
+      </p>
+      <div class="auth-field">
+        <label>6-Digit Reset Code</label>
+        <input type="text" id="fpOTP" placeholder="000000" maxlength="6"
+               style="letter-spacing:8px;font-size:24px;text-align:center;font-family:monospace;">
+      </div>
+      <button class="auth-btn" onclick="fpVerifyOTP()">Verify Code</button>
+      <p style="text-align:center;margin-top:10px;font-size:12px;color:var(--muted);">
+        Didn't receive it?
+        <a onclick="fpSendOTP()" style="color:var(--teal);cursor:pointer;">Resend</a>
+        &nbsp;·&nbsp;
+        <a onclick="hideForgotPassword()" style="color:var(--muted);cursor:pointer;">Cancel</a>
+      </p>
+    </div>
+
+    <div id="fpStep3" style="display:none;">
+      <div class="auth-field">
+        <label>New Password</label>
+        <input type="password" id="fpNewPw" placeholder="Min 6 characters">
+      </div>
+      <div class="auth-field">
+        <label>Confirm New Password</label>
+        <input type="password" id="fpConfirmPw" placeholder="Repeat new password">
+      </div>
+      <button class="auth-btn" onclick="fpSetPassword()">Set New Password</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- JS load order: state → utils → auth → shell → chat → modals → app -->
+<script src="/js/state.js?v=flair-only-1"></script>
+<script src="/js/utils.js?v=flair-only-1"></script>
+<script src="/js/auth.js?v=flair-only-1"></script>
+<script src="/js/shell.js?v=flair-only-1"></script>
+<script src="/js/chat.js?v=flair-only-1"></script>
+<script src="/js/modals.js?v=flair-only-1"></script>
+<script src="/js/app.js?v=flair-only-1"></script>
+
+</body>
+</html>

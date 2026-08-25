@@ -1,0 +1,44 @@
+/* AxonIQ — Auth Overlay Styles */
+#authOverlay {
+  position: fixed; inset: 0;
+  background: rgba(11,31,58,0.85);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+
+.auth-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px 44px;
+  width: 420px;
+  max-width: 95vw;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+}
+
+.auth-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+.auth-logo-mark {
+  width: 44px; height: 44px;
+  background: var(--teal); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Libre Baskerville', serif;
+  font-size: 20px; font-weight: 700; color: #fff;
+}
+.auth-logo h2 { font-family: 'Libre Baskerville', serif; font-size: 20px; color: var(--navy); font-weight: 700; }
+.auth-logo p  { font-size: 12px; color: var(--muted); }
+
+.auth-tabs { display: flex; margin-bottom: 24px; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+.auth-tab  { flex: 1; padding: 10px; text-align: center; font-size: 14px; font-weight: 500; cursor: pointer; background: none; border: none; color: var(--muted); transition: background 0.15s, color 0.15s; }
+.auth-tab.active { background: var(--navy); color: #fff; }
+
+.auth-field { margin-bottom: 16px; }
+.auth-field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.4px; text-transform: uppercase; }
+.auth-field input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 9px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text); outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.auth-field input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(10,123,116,0.1); }
+
+.auth-btn { width: 100%; padding: 13px; background: var(--teal); color: #fff; border: none; border-radius: 9px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px; transition: background 0.2s; }
+.auth-btn:hover     { background: #088078; }
+.auth-btn:disabled  { background: #8FA8BF; cursor: not-allowed; }
+
+.auth-error { background: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #B91C1C; margin-bottom: 14px; display: none; }
+.auth-register-only { display: none; }

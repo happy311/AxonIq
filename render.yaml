@@ -1,0 +1,30 @@
+# ── NeuroCheck v8.0 — Render Deployment Config ───────────────────────────────
+# Deploy to Render: https://render.com
+# Steps:
+#   1. Push this folder to a GitHub repo
+#   2. Go to render.com → New Web Service → Connect repo
+#   3. Render auto-detects this file and configures everything
+#   4. Free tier available (spins down after inactivity)
+
+services:
+  - type: web
+    name: neurocheck-ms
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free          # change to "starter" ($7/mo) for always-on
+    region: oregon      # options: oregon, ohio, frankfurt, singapore
+
+    envVars:
+      - key: SPACY_MODEL
+        value: /app/en_model
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PORT
+        value: "8000"
+      - key: TIMEOUT_KEEP_ALIVE
+        value: "1800"   # 30 min — outlasts 20-min LST-AI analysis
+
+    healthCheckPath: /health
+
+    # Auto-deploy on push to main branch
+    autoDeploy: true

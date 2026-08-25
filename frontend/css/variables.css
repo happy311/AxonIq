@@ -1,0 +1,38 @@
+/* AxonIQ — Design Tokens & Reset */
+:root {
+  /* Brand */
+  --navy:        #0B1F3A;
+  --teal:        #0A7B74;
+  --teal-lt:     #E6F5F4;
+  --amber:       #C97B2A;
+  --red:         #B53535;
+  --sand:        #F5F1EB;
+  --warm-white:  #FDFAF6;
+  --border:      #DDD8CF;
+  --text:        #1A1510;
+  --muted:       #6B6056;
+  --bubble-ai:   #F0F7F6;
+  --bubble-user: #0B1F3A;
+  --sidebar-w:   260px;
+
+  /* MRI tool tokens */
+  --mri-bg:      #EFF6FF;
+  --mri-border:  #BFDBFE;
+  --mri-text:    #1E40AF;
+  --mri-icon:    #3B82F6;
+  --mri-done-bg: #D1FAE5;
+  --mri-done-border: #6EE7B7;
+  --mri-done-text:   #065F46;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--warm-white);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

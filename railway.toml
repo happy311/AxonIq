@@ -1,0 +1,24 @@
+# ── NeuroCheck v8.0 — Railway Deployment Config ──────────────────────────────
+# Deploy to Railway: https://railway.app
+# Steps:
+#   1. railway login
+#   2. railway init  (in this folder)
+#   3. railway up
+#   4. railway domain  (get your public URL)
+#
+# Or connect GitHub repo in Railway dashboard for auto-deploy on push.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python3 -m uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 1800"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[environments.production.variables]
+SPACY_MODEL = "/app/en_model"
+PYTHONUNBUFFERED = "1"
