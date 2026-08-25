@@ -8,18 +8,15 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# Install CPU-only PyTorch.
-# sentence-transformers will use this for embeddings.
+# CPU-only PyTorch for EC2
 RUN pip install --no-cache-dir \
     torch \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install the remaining application dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Persistent storage directories
 RUN mkdir -p /data/db /data/chroma /data/backups
 
 ENV PORT=7860
