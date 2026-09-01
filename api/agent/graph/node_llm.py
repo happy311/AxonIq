@@ -38,6 +38,23 @@ from loguru import logger
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from api.agent.state import AgentState
+
+
+def _safe_lesion_count(mri_report: dict, lst_total) -> int:
+    """
+    lst_total (from the ensemble server) is always numeric when present.
+    mri_report["lesion_count"] comes from the free-text LLM extractor, whose
+    own prompt explicitly allows "number or 'multiple'" — int() on that raw
+    value crashes the graph (see: invalid literal for int() with base 10:
+    'multiple'). Extract the first digit run instead, defaulting to 0.
+    """
+    if lst_total is not None:
+        return int(lst_total)
+    raw = mri_report.get("lesion_count", 0)
+    if isinstance(raw, int):
+        return raw
+    match = re.search(r"\d+", str(raw))
+    return int(match.group()) if match else 0
 from api.agent.prompts import (
     SYSTEM_PROMPT, EMERGENCY_RESPONSE,
     gather, conclude, conclude_with_mri, request_mri, mri_received, rag_block, post_mri_guidance,
@@ -316,6 +333,21 @@ def node_llm_response(state: AgentState) -> dict:
     dit_episodes     = state.get("dit_episodes", 0)
     symptom_timeline = state.get("symptom_timeline", [])
 
+    # ── [v15] Short-circuit: patient asked for a case-ID/server retrieval
+    # shortcut. Answered with a fixed honest message instead of letting the
+    # LLM improvise — see node_goal_setter._asks_for_retrieval_shortcut.
+    if goal == "mri_no_shortcut":
+        return {
+            "response": (
+                "I'm not able to look up or re-check results using a case ID — "
+                "I only see results once the scan analysis finishes or you paste "
+                "your radiologist's written report. It's still processing right "
+                "now (this can take 10–20 minutes). Feel free to check back in a "
+                "bit, or paste the written report in the meantime if you have one."
+            ),
+            "next_phase": "mri_requested",
+        }
+
     # ── [v12] Short-circuit: MRI service was unreachable this turn ────────────
     # node_mri_analysis set mri_service_failed=True and pre-built the response.
     # Bypass the LLM entirely so the patient sees the retry message — not a
@@ -373,7 +405,7 @@ def node_llm_response(state: AgentState) -> dict:
                     dis_met=bool(mri_report.get("dis_met", False)),
                     dit_met=bool(mri_report.get("dit_met", False)),
                     enhancing_lesions=bool(mri_report.get("enhancing_lesions", False)),
-                    lesion_count=int(lst_total or mri_report.get("lesion_count", 0) or 0),
+                    lesion_count=_safe_lesion_count(mri_report, lst_total),
                     lesion_locations=mri_report.get("lesion_locations", []),
                     conv_dis_regions=dis_regions,
                     conv_dit_episodes=dit_episodes,

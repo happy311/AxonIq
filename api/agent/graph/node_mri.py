@@ -247,7 +247,18 @@ def _call_nifti_service(flair_path: str) -> dict | None:
 
         while time.monotonic() < deadline:
             time.sleep(POLL_INTERVAL_S)
-            poll_resp = httpx.get(result_url, timeout=poll_timeout)
+
+            # Transient hiccups (Kaggle CPU busy running the ensemble, tunnel
+            # blip, etc.) must NOT abort the whole wait — only a hard 404,
+            # explicit "error" status, or the outer deadline should stop us.
+            try:
+                poll_resp = httpx.get(result_url, timeout=poll_timeout)
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                logger.warning(
+                    "[MRI] Poll hiccup ({}: {}) — Kaggle CPU likely busy, retrying …",
+                    type(e).__name__, e,
+                )
+                continue
 
             if poll_resp.status_code == 404:
                 logger.warning("[MRI] case_id {} unknown to service (server restarted mid-job?)", case_id)

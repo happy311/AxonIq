@@ -53,6 +53,26 @@ def _is_mri_report(msg: str) -> bool:
     return sum(1 for kw in _MRI_KEYWORDS if kw in msg_lower) >= 3
 
 
+# ── Retrieval-shortcut detection (defense-in-depth against fabrication) ───────
+# [v15 BUG FIX] FABRICATED MRI RESULTS: when a patient pushed with phrases like
+# "can't you get the result using the case id", the (especially the small HF
+# fallback) LLM would comply and hallucinate a full fake report rather than
+# admit it has no such tool. The SYSTEM_PROMPT grounding rule now forbids this,
+# but for a clinical tool that instruction alone isn't a strong enough
+# guarantee — so this is caught in code and answered with a fixed, honest
+# message that bypasses the LLM entirely, the same way mri_service_failed does.
+_RETRIEVAL_SHORTCUT_PHRASES = [
+    "case id", "case number", "using the case", "by the case",
+    "check the server", "retrieve the result", "retrieve it",
+    "look it up", "pull up the result", "get the result", "fetch the result",
+]
+
+
+def _asks_for_retrieval_shortcut(msg: str) -> bool:
+    msg_lower = msg.lower()
+    return any(p in msg_lower for p in _RETRIEVAL_SHORTCUT_PHRASES)
+
+
 # ── MRI upload intent detection ───────────────────────────────────────────────
 
 _MRI_UPLOAD_INTENTS = [
@@ -139,6 +159,10 @@ def node_goal_setter(state: AgentState) -> dict:
 
     # ── Phase: mri_requested ──────────────────────────────────────────────────
     if phase == "mri_requested":
+        # Defense-in-depth: never let this reach the LLM's free-form judgment.
+        if _asks_for_retrieval_shortcut(user_msg):
+            return {"goal": "mri_no_shortcut", "next_phase": "mri_requested"}
+
         if _is_clinical_question(user_msg):
             # User is asking about their condition — re-run conclude_with_mri
             # so they get: symptoms named → consistent with MS → renewed MRI ask.
