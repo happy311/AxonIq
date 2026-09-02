@@ -333,21 +333,11 @@ def node_llm_response(state: AgentState) -> dict:
     dit_episodes     = state.get("dit_episodes", 0)
     symptom_timeline = state.get("symptom_timeline", [])
 
-    # ── [v15] Short-circuit: patient asked for a case-ID/server retrieval
-    # shortcut. Answered with a fixed honest message instead of letting the
-    # LLM improvise — see node_goal_setter._asks_for_retrieval_shortcut.
-    if goal == "mri_no_shortcut":
-        return {
-            "response": (
-                "I'm not able to look up or re-check results using a case ID — "
-                "I only see results once the scan analysis finishes or you paste "
-                "your radiologist's written report. It's still processing right "
-                "now (this can take 10–20 minutes). Feel free to check back in a "
-                "bit, or paste the written report in the meantime if you have one."
-            ),
-            "next_phase": "mri_requested",
-        }
-
+    # ── [v17] Short-circuit: mri_analysis (Path C, node_mri._handle_recheck)
+    # already did a REAL single-shot /result/<case_id> fetch for a "check the
+    # mri again" request and pre-built the honest response (still processing /
+    # not found / failed). If it came back done, goal stays "mri_received" and
+    # falls through below to the normal narrative branch instead of this one.
     # ── [v12] Short-circuit: MRI service was unreachable this turn ────────────
     # node_mri_analysis set mri_service_failed=True and pre-built the response.
     # Bypass the LLM entirely so the patient sees the retry message — not a

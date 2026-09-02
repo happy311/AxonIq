@@ -11,7 +11,7 @@ Graph topology (one pass per user turn):
      ▼
   goal_setter
      │
-     ├──(mri_received)──► mri_analysis ──► rag_retrieval ──► llm_response ──► [END]
+     ├──(mri_received / mri_recheck)──► mri_analysis ──► rag_retrieval ──► llm_response ──► [END]
      │
      └──(all other goals)──► rag_retrieval ──► llm_response ──► [END]
 """

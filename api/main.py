@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
         init_db, migrate_add_admin_column,
         migrate_add_logs_table, migrate_add_otp_table, migrate_add_session_state,
         migrate_add_clinical_state, migrate_add_tier_log, migrate_add_nifti_queue,
-        migrate_add_mri_jobs,
+        migrate_add_mri_jobs, migrate_add_mri_case_id,
         set_admin, get_user_by_username, DB_PATH,
     )
     init_db()
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
     migrate_add_tier_log()            # v11: risk trajectory log
     migrate_add_nifti_queue()         # v11: DB-backed NIfTI queue (multi-worker safe)
     migrate_add_mri_jobs()            # v12: async MRI job status (upload → poll → result)
+    migrate_add_mri_case_id()         # v17: persist case_id for a real "check again" recheck
     logger.info("[AxonIQ] SQLite at: {}", DB_PATH)
 
     # 2. Auto-grant admin from env

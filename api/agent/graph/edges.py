@@ -16,8 +16,10 @@ def route_after_emergency(state: AgentState) -> str:
 
 
 def route_after_goal(state: AgentState) -> str:
-    """mri_received goes to mri_analysis node first; everything else → rag → llm."""
-    if state.get("goal") == "mri_received":
+    """mri_received / mri_recheck go to mri_analysis node first; everything
+    else → rag → llm. mri_recheck (v17) is a patient-triggered "check the mri
+    again" — node_mri._handle_recheck does a real single-shot server fetch."""
+    if state.get("goal") in ("mri_received", "mri_recheck"):
         return "mri_analysis"
     return "rag_retrieval"
 

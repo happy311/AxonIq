@@ -56,8 +56,10 @@ from api.database import (
 
     # MRI background job tracking (async upload → poll → result)
     migrate_add_mri_jobs,
+    migrate_add_mri_case_id,
     create_mri_job,
     set_mri_job_status,
+    set_mri_job_case_id,
     get_mri_job,
 
     # Messages
@@ -96,7 +98,8 @@ __all__ = [
     "store_nifti_path", "pop_nifti_path",
     "store_nifti_paths", "pop_nifti_paths", "has_queued_nifti_paths",
     # MRI background job tracking
-    "migrate_add_mri_jobs", "create_mri_job", "set_mri_job_status", "get_mri_job",
+    "migrate_add_mri_jobs", "migrate_add_mri_case_id",
+    "create_mri_job", "set_mri_job_status", "set_mri_job_case_id", "get_mri_job",
     # Messages
     "save_message", "get_messages", "get_message_count",
     # Logs

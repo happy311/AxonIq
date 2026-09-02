@@ -505,12 +505,36 @@ def set_mri_job_status(session_uuid: str, status: str, error: Optional[str] = No
         )
 
 
+def migrate_add_mri_case_id() -> None:
+    """Add case_id column to mri_jobs (v17) so a later 'check the mri again' can
+    re-poll the ensemble server's /result/<case_id> for THIS session's actual
+    submission, instead of the LLM having no grounded way to answer and
+    fabricating a result (see: hallucinated case-ID retrieval bug)."""
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE mri_jobs ADD COLUMN case_id TEXT DEFAULT NULL")
+        except Exception:
+            pass  # already exists
+
+
+def set_mri_job_case_id(session_uuid: str, case_id: str) -> None:
+    """Record the ensemble server's case_id for this session's submission, as
+    soon as POST /predict acknowledges it — independent of whether our own
+    polling later times out. This is what makes a real 'recheck via case id'
+    possible instead of a hallucinated one."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE mri_jobs SET case_id=?, updated_at=? WHERE session_uuid=?",
+            (case_id, _now(), session_uuid),
+        )
+
+
 def get_mri_job(session_uuid: str) -> Optional[Dict[str, Any]]:
-    """Return {status, error, created_at, updated_at} for a session's MRI job,
-    or None if no job has ever been started for this session."""
+    """Return {status, error, case_id, created_at, updated_at} for a session's
+    MRI job, or None if no job has ever been started for this session."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT status, error, created_at, updated_at FROM mri_jobs WHERE session_uuid=?",
+            "SELECT status, error, case_id, created_at, updated_at FROM mri_jobs WHERE session_uuid=?",
             (session_uuid,),
         ).fetchone()
         return dict(row) if row else None

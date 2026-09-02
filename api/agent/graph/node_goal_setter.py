@@ -53,28 +53,41 @@ def _is_mri_report(msg: str) -> bool:
     return sum(1 for kw in _MRI_KEYWORDS if kw in msg_lower) >= 3
 
 
-# ── Retrieval-shortcut detection (defense-in-depth against fabrication) ───────
-# [v15 BUG FIX] FABRICATED MRI RESULTS: when a patient pushed with phrases like
-# "can't you get the result using the case id", the (especially the small HF
-# fallback) LLM would comply and hallucinate a full fake report rather than
-# admit it has no such tool. The SYSTEM_PROMPT grounding rule now forbids this,
-# but for a clinical tool that instruction alone isn't a strong enough
-# guarantee — so this is caught in code and answered with a fixed, honest
-# message that bypasses the LLM entirely, the same way mri_service_failed does.
-_RETRIEVAL_SHORTCUT_PHRASES = [
+# ── Recheck-via-case-id detection ─────────────────────────────────────────────
+# [v15 BUG FIX, v17 REVISED] FABRICATED MRI RESULTS: when a patient pushed with
+# phrases like "can't you get the result using the case id", the (especially
+# the small HF fallback) LLM would comply and hallucinate a full fake report
+# rather than admit it had no such tool.
+#
+# v17: the app DOES have a real way to do this — the ensemble server's
+# GET /result/<case_id> endpoint, the same one _call_nifti_service polls.
+# So instead of just refusing, these phrases now route to goal "mri_recheck",
+# which does one real, single-shot fetch of THIS session's actual case_id
+# (see node_mri._handle_recheck) and answers with whatever it genuinely
+# says — done / still processing / failed. Grounded, never invented.
+_RECHECK_PHRASES = [
     "case id", "case number", "using the case", "by the case",
     "check the server", "retrieve the result", "retrieve it",
     "look it up", "pull up the result", "get the result", "fetch the result",
+    "check again", "check the mri again", "check my mri again",
+    "check my results again", "recheck", "re-check", "check now",
+    "any update", "check my mri", "check the results",
 ]
 
 
-def _asks_for_retrieval_shortcut(msg: str) -> bool:
+def _asks_to_recheck_mri(msg: str) -> bool:
     msg_lower = msg.lower()
-    return any(p in msg_lower for p in _RETRIEVAL_SHORTCUT_PHRASES)
+    return any(p in msg_lower for p in _RECHECK_PHRASES)
 
 
 # ── MRI upload intent detection ───────────────────────────────────────────────
-
+# NOTE (v17 bug fix): "mri result" / "my scan result" used to be here, but
+# they're substrings of ordinary status questions like "how are my mri
+# results" — that falsely matched _wants_to_upload_mri() even while
+# phase=="mri_received" with a real report already in hand, kicking the
+# patient back into "please upload again" instead of answering from the
+# report they already have. Removed; genuine upload intent is still covered
+# by the phrases below (file/button/verb-based, not "result"-based).
 _MRI_UPLOAD_INTENTS = [
     "analyse my mri", "analyze my mri",
     "can you analyse", "can you analyze",
@@ -85,7 +98,7 @@ _MRI_UPLOAD_INTENTS = [
     "my mri scan", "my brain mri", "my mri files",
     "nifti file", "nii.gz", ".nii",
     "can i upload", "how do i upload", "how to upload",
-    "mri button", "mri result", "my scan result",
+    "mri button",
     "i got my mri", "i have my mri", "i got my scan",
 ]
 
@@ -159,9 +172,11 @@ def node_goal_setter(state: AgentState) -> dict:
 
     # ── Phase: mri_requested ──────────────────────────────────────────────────
     if phase == "mri_requested":
-        # Defense-in-depth: never let this reach the LLM's free-form judgment.
-        if _asks_for_retrieval_shortcut(user_msg):
-            return {"goal": "mri_no_shortcut", "next_phase": "mri_requested"}
+        # "check the mri again" / "using the case id" / etc. → do a REAL
+        # single-shot recheck against the ensemble server via node_mri
+        # ._handle_recheck, instead of letting the LLM improvise an answer.
+        if _asks_to_recheck_mri(user_msg):
+            return {"goal": "mri_recheck", "next_phase": "mri_requested"}
 
         if _is_clinical_question(user_msg):
             # User is asking about their condition — re-run conclude_with_mri

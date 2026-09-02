@@ -48,6 +48,28 @@ _NO_MRI_RECEIVED_MSG = (
 
 _VALID_DIS_REGIONS = {"cerebral", "brainstem", "cerebellar", "spinal_cord", "optic_nerve"}
 
+# Shown by the real "check the mri again" recheck when the ensemble server
+# confirms the job is still processing — grounded in an actual fetch, never
+# invented (see: hallucinated case-ID retrieval bug).
+_RECHECK_STILL_PROCESSING_MSG = (
+    "Just checked with the analysis server — your scan is still processing. "
+    "This can take up to 20 minutes depending on server load. Feel free to "
+    "ask again in a bit, or paste your radiologist's written report in the "
+    "meantime if you have one."
+)
+
+_RECHECK_NO_CASE_MSG = (
+    "I don't have a scan on file to check — I don't see a case ID for this "
+    "session. Please upload your FLAIR NIfTI file (.nii or .nii.gz) using the "
+    "MRI button, or paste your radiologist's written report."
+)
+
+_RECHECK_FAILED_MSG = (
+    "I checked with the analysis server, but it reports the earlier scan "
+    "processing failed (or the case is no longer known to it — it may have "
+    "restarted). You'll need to upload your FLAIR file again."
+)
+
 
 def node_mri_analysis(state: AgentState) -> dict:
     from api.agent.llm import llm
@@ -56,11 +78,17 @@ def node_mri_analysis(state: AgentState) -> dict:
     user_msg    = state.get("user_message", "")
     nifti_paths = state.get("nifti_paths")   # {"flair": path[, "t1": path]} or None
 
+    # ── Path C: "check the mri again" — a REAL single-shot re-poll of the
+    # ensemble server by case_id, not a hallucinated one. See node_goal_setter
+    # ._asks_to_recheck_mri for the trigger phrases.
+    if state.get("goal") == "mri_recheck":
+        return _handle_recheck(state, llm)
+
     # ── Path A: NIfTI file uploaded ──────────────────────────────────────────
     if nifti_paths and nifti_paths.get("flair"):
         flair_path = nifti_paths["flair"]
 
-        raw_response = _call_nifti_service(flair_path)
+        raw_response = _call_nifti_service(flair_path, session_id=state.get("session_id"))
 
         # Clean up the temp NIfTI file immediately after the service call —
         # it can be 100-500 MB and is not needed once sent.
@@ -180,10 +208,18 @@ def _parse_ensemble_response(raw: dict, llm) -> dict:
 
 # ── NIfTI service call ────────────────────────────────────────────────────────
 
-def _call_nifti_service(flair_path: str) -> dict | None:
+def _call_nifti_service(flair_path: str, session_id: str | None = None) -> dict | None:
     """
     Submit a FLAIR NIfTI file to the external segmentation-ensemble service and
     poll for the result.
+
+    v17 change: as soon as the server acknowledges the submission with a
+    case_id, that case_id is persisted to the mri_jobs table (keyed on
+    session_id) BEFORE polling even starts. This means that if our own
+    polling later times out client-side (deadline reached, worker restarted,
+    etc.) the case_id survives and a later "check the mri again" from the
+    patient can do a real, grounded re-fetch of /result/<case_id> — instead
+    of the LLM having nothing to work with and inventing a result.
 
     v16 change (async submit+poll): the Kaggle server used to run the whole
     multi-minute pipeline (template downloads + registration + skull-strip +
@@ -239,6 +275,16 @@ def _call_nifti_service(flair_path: str) -> dict | None:
             return None
 
         logger.info("[MRI] Submitted as case_id={} — polling for result …", case_id)
+
+        if session_id:
+            try:
+                from api.db import set_mri_job_case_id
+                set_mri_job_case_id(session_id, case_id)
+            except Exception as e:
+                # Never let a DB hiccup here abort a submission that already
+                # succeeded server-side — worst case, "check again" later
+                # just won't have a case_id to work with.
+                logger.warning("[MRI] Could not persist case_id for session {}: {}", session_id, e)
 
         # Poll.
         result_url = f"{base_url}/result/{case_id}"
@@ -302,6 +348,108 @@ def _call_nifti_service(flair_path: str) -> dict | None:
     except Exception as e:
         logger.error("[MRI] Unexpected error: {}", e)
         return None
+
+
+# ── Real recheck-by-case-id (Path C) ──────────────────────────────────────────
+
+def _derive_base_url(mri_service_url: str) -> str:
+    return (
+        mri_service_url.rsplit("/predict", 1)[0]
+        if mri_service_url.endswith("/predict")
+        else mri_service_url.rstrip("/")
+    )
+
+
+def _fetch_result_once(base_url: str, case_id: str) -> dict:
+    """
+    Single, non-looping GET /result/<case_id>. Used for an explicit patient
+    "check the mri again" — grounded truth from the real server, not a poll
+    loop and not an LLM guess.
+
+    Returns {"outcome": "done", "document": {...}}
+          | {"outcome": "processing"}
+          | {"outcome": "error", "detail": str}
+          | {"outcome": "not_found"}
+    """
+    import httpx
+
+    result_url = f"{base_url}/result/{case_id}"
+    try:
+        resp = httpx.get(result_url, timeout=httpx.Timeout(30.0, connect=15.0))
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        logger.warning("[MRI Recheck] Transient error fetching {}: {}", result_url, e)
+        return {"outcome": "error", "detail": str(e)}
+
+    if resp.status_code == 404:
+        return {"outcome": "not_found"}
+
+    try:
+        resp.raise_for_status()
+        document = resp.json()
+    except Exception as e:
+        logger.warning("[MRI Recheck] Bad response from {}: {}", result_url, e)
+        return {"outcome": "error", "detail": str(e)}
+
+    status = document.get("status")
+    if status == "done":
+        return {"outcome": "done", "document": document}
+    if status == "error":
+        return {"outcome": "error", "detail": document.get("error", "?")}
+    return {"outcome": "processing"}
+
+
+def _handle_recheck(state: AgentState, llm) -> dict:
+    """
+    Goal == "mri_recheck": the patient explicitly asked us to check the
+    server again. Do a REAL single-shot fetch by case_id and answer with
+    whatever it actually says — done, still processing, or failed. Never
+    fabricated, and never a silent no-op either.
+    """
+    from api.core.config import MRI_SERVICE_URL
+
+    session_id = state.get("session_id")
+    case_id    = state.get("mri_case_id")
+
+    if not case_id and session_id:
+        try:
+            from api.db import get_mri_job
+            job = get_mri_job(session_id)
+            case_id = job.get("case_id") if job else None
+        except Exception as e:
+            logger.warning("[MRI Recheck] Could not look up case_id for session {}: {}", session_id, e)
+
+    if not case_id or not MRI_SERVICE_URL:
+        return {
+            "mri_report":         None,
+            "mri_service_failed": True,
+            "response":           _RECHECK_NO_CASE_MSG,
+            "next_phase":         "mri_requested",
+        }
+
+    base_url = _derive_base_url(MRI_SERVICE_URL)
+    result   = _fetch_result_once(base_url, case_id)
+
+    if result["outcome"] == "done":
+        findings = _parse_ensemble_response(result["document"], llm)
+        logger.info("[MRI Recheck] case_id={} came back done: {}", case_id, findings)
+        return _merge_mri_findings(state, findings, from_nifti=True)
+
+    if result["outcome"] == "processing":
+        logger.info("[MRI Recheck] case_id={} still processing", case_id)
+        return {
+            "mri_report":         None,
+            "mri_service_failed": True,
+            "response":           _RECHECK_STILL_PROCESSING_MSG,
+            "next_phase":         "mri_requested",
+        }
+
+    logger.warning("[MRI Recheck] case_id={} outcome={}", case_id, result["outcome"])
+    return {
+        "mri_report":         None,
+        "mri_service_failed": True,
+        "response":           _RECHECK_FAILED_MSG,
+        "next_phase":         "mri_requested",
+    }
 
 
 # ── State merger ──────────────────────────────────────────────────────────────
