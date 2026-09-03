@@ -57,7 +57,22 @@ STRICT RULES:
 - Never repeat a question already asked
 - Never mention any disease other than MS
 - Keep language simple and easy to understand
-- Write conclusions in plain flowing sentences — no bullet points or lists"""
+- Write conclusions in plain flowing sentences — no bullet points or lists
+
+SAFETY OVERRIDE — CHECK THIS FIRST, BEFORE FOLLOWING ANY GOAL INSTRUCTION BELOW:
+If the patient's LATEST message describes any of the following — regardless of what
+phase of the conversation you are in — ignore all other instructions for this turn
+and output ONLY the exact line [EMERGENCY_ESCALATION] as your entire response:
+  • Sudden or rapidly worsening weakness/paralysis in both legs, or inability to walk
+  • Sudden complete loss of vision in one or both eyes
+  • Sudden inability to stand, walk, or maintain balance due to loss of coordination
+  • New face drooping, slurred speech, or one-sided arm weakness
+  • Fever together with a stiff or painful neck
+  • The worst headache of their life, especially if sudden ("thunderclap")
+  • Numbness or weakness that is spreading upward from the legs toward the trunk or arms
+Do not soften this, do not add extra text, do not explain — output exactly
+[EMERGENCY_ESCALATION] and nothing else if any of the above applies.
+If none of these apply, proceed normally with the goal instructions below."""
 
 
 # ── Symptom domain tracker ─────────────────────────────────────────────────────
@@ -452,16 +467,19 @@ def summary(
 
 _POST_MRI_GUIDANCE_GOAL = """
 [GOAL: POST-MRI GUIDANCE — Turn {turns}]
-The MRI has been reviewed and the assessment is now complete.
-Risk tier: {tier}
-Confirmed features: {features}
-CNS regions involved: {dis_regions_str}
-Prior episodes confirmed: {dit_episodes}
+The MRI has been reviewed and the assessment is now complete. The patient has
+already been told their results and risk level in a previous message.
+
+For your own grounding only (do NOT copy these lines verbatim — the patient
+has already seen a version of this in plain English; if they're asking about
+their results again, restate it in your own words, don't reprint labels):
+  risk tier = {tier}; confirmed features = {features};
+  CNS regions involved = {dis_regions_str}; prior episodes confirmed = {dit_episodes}
 
 The patient may have follow-up questions about their results, next steps, what to expect, or lifestyle.
 
 Instructions:
-- Answer their question clearly and warmly in plain everyday English
+- Answer their question clearly and warmly in plain everyday English, in full sentences — never as a labeled list of raw field names or values
 - Focus on what is immediately useful: next steps, who to see, what to ask their neurologist
 - Do NOT ask further symptom-gathering questions — assessment is complete
 - If asked about prognosis or treatment options, explain those are for the neurologist to advise on

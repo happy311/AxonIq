@@ -95,20 +95,48 @@ def analyse_mri_text(report_text: str, llm) -> dict:
         data.setdefault("dit_met",           False)
         data.setdefault("dis_regions",       [])
         data.setdefault("summary",           "")
+        data.setdefault("parse_failed",      False)
+
+        # Deduplicate and validate dis_regions FIRST — dis_met is derived from
+        # this, so it must be finalised before dis_met is computed or any tier
+        # floor is applied.
+        valid_regions = {"cerebral", "brainstem", "cerebellar", "spinal_cord", "optic_nerve"}
+        data["dis_regions"] = list(dict.fromkeys(
+            r for r in data.get("dis_regions", []) if r in valid_regions
+        ))
+
+        # Deterministic recompute: dis_met is derived from dis_regions, never
+        # trusted from the LLM's own (redundant) assertion — same idiom as the
+        # tier floor below. This MUST happen before the tier floor checks, or
+        # a lied dis_met=True (with <2 real regions) would still incorrectly
+        # force tier to HIGH before ever being caught.
+        llm_dis_met = data.get("dis_met")
+        data["dis_met"] = len(data["dis_regions"]) >= 2
+        if llm_dis_met != data["dis_met"]:
+            logger.warning(
+                "[MRI Analyser] dis_met mismatch: LLM said {}, dis_regions={} -> corrected to {}",
+                llm_dis_met, data["dis_regions"], data["dis_met"],
+            )
 
         # Safety net: if there are enhancing lesions, tier must be at least HIGH
         if data["enhancing_lesions"] and data["tier"] not in ("HIGH",):
             data["tier"] = "HIGH"
 
-        # Safety net: if DIS is met, tier must be at least HIGH
+        # Safety net: if DIS is met (now the corrected, region-derived value),
+        # tier must be at least HIGH.
         if data["dis_met"] and data["tier"] not in ("HIGH",):
             data["tier"] = "HIGH"
 
-        # Deduplicate and validate dis_regions
-        valid_regions = {"cerebral", "brainstem", "cerebellar", "spinal_cord", "optic_nerve"}
-        data["dis_regions"] = list(dict.fromkeys(
-            r for r in data.get("dis_regions", []) if r in valid_regions
-        ))
+        # dit_met can't be fully re-derived from this schema (we don't have separate
+        # enhancing/non-enhancing region lists), but it logically requires at least one
+        # enhancing lesion to be true. Reject it outright if that's not asserted.
+        llm_dit_met = data.get("dit_met")
+        if data["dit_met"] and not data["enhancing_lesions"]:
+            data["dit_met"] = False
+            logger.warning(
+                "[MRI Analyser] dit_met=True with enhancing_lesions=False — "
+                "rejecting unsupported dit_met assertion",
+            )
 
         logger.info(
             "[MRI Analyser] tier={} dis_met={} dit_met={} dis_regions={} enhancing={}",
@@ -130,6 +158,7 @@ def analyse_mri_text(report_text: str, llm) -> dict:
             "dis_regions":       [],
             "tier":              "LOW",
             "summary":           "Could not parse MRI report — please provide the full radiologist report text.",
+            "parse_failed":      True,
         }
 
 
@@ -145,6 +174,7 @@ def _no_report() -> dict:
         "dis_regions":       [],
         "tier":              "LOW",
         "summary":           "No MRI report provided.",
+        "parse_failed":      False,
     }
 
 

@@ -33,6 +33,41 @@ router = APIRouter(tags=["chat"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MRI result persistence — shared by the synchronous /chat path (pasted text
+# report) and the background NIfTI analysis path, so a completed MRI result
+# is always saved as a longitudinal data point (see api/database.py:
+# save_mri_result / get_latest_mri_result / get_mri_history_for_user), and
+# the patient sees how this scan compares to their last one.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _persist_mri_result_and_append_progression(
+    prose: str, session_uuid: str, user_id: int, source: str,
+    tier: str, dis_regions: list, dit_episodes: int, mri_report: dict,
+) -> str:
+    from api.database import save_mri_result, get_latest_mri_result
+    from api.agent.tools.results_summary import extract_lesion_metrics, build_progression_note
+
+    lesion_count, lesion_volume = extract_lesion_metrics(mri_report)
+
+    # Must read the previous result BEFORE saving the new one, or "latest"
+    # would just be this scan.
+    previous = get_latest_mri_result(user_id)
+
+    try:
+        save_mri_result(
+            session_uuid=session_uuid, user_id=user_id, source=source, tier=tier,
+            findings=mri_report, lesion_count=lesion_count, lesion_volume=lesion_volume,
+            dis_regions=dis_regions, dit_episodes=dit_episodes,
+        )
+    except Exception as e:
+        logger.error("[MRI Result] Failed to save result for session={}: {}", session_uuid, e)
+        return prose  # don't block the patient's response on a storage error
+
+    note = build_progression_note(previous, tier, lesion_count, lesion_volume)
+    return prose + note
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # /chat  — main conversation endpoint
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -173,6 +208,16 @@ async def chat_endpoint(
     new_dit        = result["dit_episodes"]
     new_timeline   = result["symptom_timeline"]
 
+    # ── Save completed MRI result for progression tracking ────────────────────
+    # This path covers a pasted radiologist text report (NIfTI uploads are
+    # handled by _run_mri_analysis_background below). Only fires once a real,
+    # successfully-parsed result exists — never on a parse failure.
+    mri_report = result.get("mri_report")
+    if result.get("mri_results_ready") and mri_report and not mri_report.get("parse_failed"):
+        prose = _persist_mri_result_and_append_progression(
+            prose, sid, user_id, "text", new_tier, new_dis, new_dit, mri_report,
+        )
+
     # ── Persist response + updated clinical state ─────────────────────────────
     save_message(sid, "assistant", prose)
     update_session_state(
@@ -283,6 +328,7 @@ async def upload_nifti(
         _run_mri_analysis_background,
         session_id,
         {"flair": flair_path, "t1": None},
+        current_user["id"],
     )
 
     logger.info(
@@ -307,7 +353,7 @@ async def upload_nifti(
 # does not block the event loop or any other request.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _run_mri_analysis_background(session_id: str, nifti_paths: dict) -> None:
+def _run_mri_analysis_background(session_id: str, nifti_paths: dict, user_id: int) -> None:
     from api.agent.chat import chat as agent_chat
     from api.database import (
         get_session_state, save_message, update_session_state,
@@ -338,7 +384,17 @@ def _run_mri_analysis_background(session_id: str, nifti_paths: dict) -> None:
             symptom_timeline=db_state.get("symptom_timeline", []),
         )
 
-        save_message(session_id, "assistant", result["prose"])
+        prose = result["prose"]
+
+        # ── Save completed MRI result for progression tracking ────────────────
+        mri_report = result.get("mri_report")
+        if result.get("mri_results_ready") and mri_report and not mri_report.get("parse_failed"):
+            prose = _persist_mri_result_and_append_progression(
+                prose, session_id, user_id, "nifti",
+                result["tier"], result["dis_regions"], result["dit_episodes"], mri_report,
+            )
+
+        save_message(session_id, "assistant", prose)
         update_session_state(
             session_id, result["next_phase"], result["tier"], result["features"],
             dis_regions=result["dis_regions"],
@@ -357,6 +413,31 @@ def _run_mri_analysis_background(session_id: str, nifti_paths: dict) -> None:
             set_mri_job_status(session_id, "error", error=str(e)[:300])
         except Exception:
             pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /mri/history  — a patient's full MRI result history, oldest → newest, for
+# progression tracking / a trend chart in the frontend. Backed by the
+# mri_results table (see api/database.py) which every completed scan gets
+# saved to, independent of which chat session it came from.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/mri/history")
+@limiter.limit("60/minute")
+async def mri_history(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Returns this patient's saved MRI results across all their sessions,
+    ordered oldest → newest: [{id, session_uuid, source, tier, lesion_count,
+    lesion_volume_mm3, lesion_locations, dis_regions, dis_met, dit_met,
+    dit_episodes, created_at}, ...]. Empty list if none saved yet.
+    """
+    from api.database import get_mri_history_for_user
+
+    history = get_mri_history_for_user(current_user["id"])
+    return {"count": len(history), "results": history}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

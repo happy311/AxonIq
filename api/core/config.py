@@ -33,7 +33,15 @@ HF_MODEL = os.environ.get("HF_MODEL", "")   # leave blank → auto-probe
 USE_HF   = bool(HF_TOKEN) and HF_TOKEN not in ("", "none", "local")
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-JWT_SECRET         = os.environ.get("JWT_SECRET", "axoniq-dev-secret-change-in-production")
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is not set. Refusing to start with a "
+        "default/hardcoded secret — this would let anyone forge login tokens "
+        "for any user. Set JWT_SECRET to a long random value (e.g. "
+        "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"`) "
+        "in your deployment environment before starting the app."
+    )
 JWT_ALGORITHM      = "HS256"
 JWT_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "10080"))  # 7 days
 

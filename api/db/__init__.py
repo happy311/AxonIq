@@ -62,6 +62,13 @@ from api.database import (
     set_mri_job_case_id,
     get_mri_job,
 
+    # MRI results history (longitudinal — for progression tracking)
+    migrate_add_mri_results,
+    save_mri_result,
+    get_latest_mri_result,
+    get_mri_history_for_user,
+    get_mri_history_for_session,
+
     # Messages
     save_message,
     get_messages,
@@ -100,6 +107,9 @@ __all__ = [
     # MRI background job tracking
     "migrate_add_mri_jobs", "migrate_add_mri_case_id",
     "create_mri_job", "set_mri_job_status", "set_mri_job_case_id", "get_mri_job",
+    # MRI results history (longitudinal — for progression tracking)
+    "migrate_add_mri_results", "save_mri_result", "get_latest_mri_result",
+    "get_mri_history_for_user", "get_mri_history_for_session",
     # Messages
     "save_message", "get_messages", "get_message_count",
     # Logs

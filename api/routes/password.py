@@ -10,6 +10,7 @@ import string
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from loguru import logger
 
 from api.auth import get_current_user, create_access_token, decode_token
 
@@ -48,8 +49,8 @@ async def forgot_password(request: Request):
         raise HTTPException(status_code=400, detail="Email is required")
     user = get_user_by_email(email)
     if not user:
-        return {"dev_mode": True, "dev_otp": None,
-                "dev_error": "No account found with this email. Please register first."}
+        # Don't confirm/deny account existence to an unauthenticated caller.
+        return {"message": "If an account exists for this email, a code has been sent."}
     otp      = "".join(random.choices(string.digits, k=6))
     otp_hash = hashlib.sha256(otp.encode()).hexdigest()
     expires  = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
@@ -62,9 +63,19 @@ async def forgot_password(request: Request):
             if send_otp_email(email, user["username"], otp):
                 return {"message": "Code sent to your email"}
         except Exception as e:
-            pass  # fall through to dev mode
+            logger.error("[Password Reset] send_otp_email failed for {}: {}", email, e)
 
-    return {"dev_mode": True, "dev_otp": otp, "message": "Email not configured — use code below"}
+    # NEVER return the OTP itself. If we get here, delivery genuinely failed
+    # or SMTP isn't configured — the caller needs a way to reset without an
+    # attacker being able to self-serve the code for any known email address.
+    logger.warning(
+        "[Password Reset] SMTP not configured or delivery failed for {} — "
+        "OTP was generated but NOT returned to the client.", email
+    )
+    raise HTTPException(
+        status_code=503,
+        detail="Password reset email could not be sent right now. Please contact support or try again later.",
+    )
 
 
 @router.post("/verify-otp")

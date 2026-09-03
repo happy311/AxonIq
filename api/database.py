@@ -505,6 +505,133 @@ def set_mri_job_status(session_uuid: str, status: str, error: Optional[str] = No
         )
 
 
+def migrate_add_mri_results() -> None:
+    """
+    Add mri_results table — one row per completed MRI analysis (NIfTI ensemble
+    or pasted radiologist text), independent of chat_sessions/mri_jobs which
+    only track the *current* in-progress state. This is what makes disease
+    progression trackable: a patient's scans accumulate here across sessions
+    and can be queried in time order (see save_mri_result / get_latest_mri_result
+    / get_mri_history_for_user).
+    """
+    with get_conn() as conn:
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS mri_results (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_uuid      TEXT    NOT NULL REFERENCES chat_sessions(session_uuid),
+            user_id           INTEGER NOT NULL REFERENCES users(id),
+            source            TEXT    NOT NULL,               -- 'nifti' or 'text'
+            tier              TEXT    NOT NULL,
+            lesion_count      INTEGER DEFAULT NULL,
+            lesion_volume_mm3 REAL    DEFAULT NULL,
+            lesion_locations  TEXT    NOT NULL DEFAULT '[]',
+            dis_regions       TEXT    NOT NULL DEFAULT '[]',
+            dis_met           INTEGER NOT NULL DEFAULT 0,
+            dit_met           INTEGER NOT NULL DEFAULT 0,
+            dit_episodes      INTEGER NOT NULL DEFAULT 0,
+            findings_json     TEXT    NOT NULL,
+            created_at        TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mri_results_user    ON mri_results(user_id);
+        CREATE INDEX IF NOT EXISTS idx_mri_results_session ON mri_results(session_uuid);
+        CREATE INDEX IF NOT EXISTS idx_mri_results_time    ON mri_results(created_at);
+        """)
+
+
+def save_mri_result(
+    session_uuid:  str,
+    user_id:       int,
+    source:        str,
+    tier:          str,
+    findings:      dict,
+    lesion_count:  Optional[int]   = None,
+    lesion_volume: Optional[float] = None,
+    dis_regions:   list | None     = None,
+    dit_episodes:  int             = 0,
+) -> int:
+    """
+    Persist one completed MRI analysis as a longitudinal data point.
+    `lesion_count` / `lesion_volume` should be pre-computed by the caller via
+    api.agent.tools.results_summary.extract_lesion_metrics(findings), so the
+    same numbers shown to the patient are the ones stored here.
+    Returns the new row id.
+    """
+    dis_regions = dis_regions or []
+    now = _now()
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO mri_results
+               (session_uuid, user_id, source, tier, lesion_count, lesion_volume_mm3,
+                lesion_locations, dis_regions, dis_met, dit_met, dit_episodes,
+                findings_json, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                session_uuid, user_id, source, tier,
+                lesion_count, lesion_volume,
+                json.dumps(findings.get("lesion_locations", [])),
+                json.dumps(dis_regions),
+                1 if findings.get("dis_met") else 0,
+                1 if findings.get("dit_met") else 0,
+                dit_episodes,
+                json.dumps(findings),
+                now,
+            ),
+        )
+        return cur.lastrowid
+
+
+def _row_to_mri_result(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    d["lesion_locations"] = json.loads(d.get("lesion_locations") or "[]")
+    d["dis_regions"]      = json.loads(d.get("dis_regions") or "[]")
+    d["dis_met"]          = bool(d.get("dis_met"))
+    d["dit_met"]          = bool(d.get("dit_met"))
+    return d
+
+
+def get_latest_mri_result(user_id: int) -> Optional[dict]:
+    """
+    Most recently saved MRI result for this user, across all their sessions —
+    used to build the "compared to your last scan" progression note the
+    moment a NEW result comes in. Call this BEFORE save_mri_result() for the
+    new scan, or it will just return the new scan itself.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT id, session_uuid, source, tier, lesion_count, lesion_volume_mm3,
+                      lesion_locations, dis_regions, dis_met, dit_met, dit_episodes, created_at
+               FROM mri_results WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+    return _row_to_mri_result(row) if row else None
+
+
+def get_mri_history_for_user(user_id: int, limit: int = 100) -> list:
+    """Full MRI result history for a user across all sessions, oldest → newest —
+    for a progression view / trend chart."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, session_uuid, source, tier, lesion_count, lesion_volume_mm3,
+                      lesion_locations, dis_regions, dis_met, dit_met, dit_episodes, created_at
+               FROM mri_results WHERE user_id=? ORDER BY created_at ASC, id ASC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+    return [_row_to_mri_result(r) for r in rows]
+
+
+def get_mri_history_for_session(session_uuid: str) -> list:
+    """MRI results saved within a single session (usually 0 or 1 — a patient
+    typically uploads once per session — but supports rechecks)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, session_uuid, source, tier, lesion_count, lesion_volume_mm3,
+                      lesion_locations, dis_regions, dis_met, dit_met, dit_episodes, created_at
+               FROM mri_results WHERE session_uuid=? ORDER BY created_at ASC, id ASC""",
+            (session_uuid,),
+        ).fetchall()
+    return [_row_to_mri_result(r) for r in rows]
+
+
 def migrate_add_mri_case_id() -> None:
     """Add case_id column to mri_jobs (v17) so a later 'check the mri again' can
     re-poll the ensemble server's /result/<case_id> for THIS session's actual

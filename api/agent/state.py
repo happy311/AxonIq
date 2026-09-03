@@ -53,6 +53,13 @@ class AgentState(TypedDict):
     nifti_paths:        Optional[dict]   # {"flair": path} or None
     mri_report:        Optional[dict]    # returned document from MRI service
     mri_service_failed: bool             # True when POST succeeded but service was unreachable
+    mri_results_ready:  bool             # v18: True when _merge_mri_findings just built a
+                                          # deterministic results message (see
+                                          # api/agent/tools/results_summary.py) — node_llm.py
+                                          # short-circuits on this instead of trusting the
+                                          # (often free-tier fallback) LLM to convey it correctly
+    mri_case_id:        Optional[str]    # v17: ensemble server case_id for this session's
+                                          # submission, for a real "check the mri again" recheck
 
     # ── RAG ───────────────────────────────────────────────────────────────────
     rag_context:  str

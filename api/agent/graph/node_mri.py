@@ -70,6 +70,19 @@ _RECHECK_FAILED_MSG = (
     "restarted). You'll need to upload your FLAIR file again."
 )
 
+# v19: shown when the extraction LLM fails to produce valid structured data
+# from a pasted text report — see mri_analyzer.analyse_mri_text's
+# "parse_failed" flag. Without this, a parse failure silently fell through
+# to a default tier="LOW" dict and _merge_mri_findings would confidently
+# tell the patient their scan "doesn't look like MS" — a false reassurance
+# caused by an extraction bug, not an actual normal scan.
+_PARSE_FAILED_TEXT_MSG = (
+    "I had trouble reading the structure of that report — the wording or "
+    "formatting may have thrown off the extraction. Could you paste the "
+    "full radiologist report text again, or try uploading the FLAIR file "
+    "directly with the MRI button instead?"
+)
+
 
 def node_mri_analysis(state: AgentState) -> dict:
     from api.agent.llm import llm
@@ -454,6 +467,55 @@ def _handle_recheck(state: AgentState, llm) -> dict:
 
 # ── State merger ──────────────────────────────────────────────────────────────
 
+def _handle_parse_failure(state: AgentState, findings: dict, *, from_nifti: bool) -> dict:
+    """
+    findings["parse_failed"] is True — the extraction LLM (analyse_mri_text)
+    did not return usable structured data. Never merge this as if it were a
+    real result (that would silently report a false "looks normal" tier).
+    """
+    if not from_nifti:
+        # Path B (pasted text): no independent data to fall back on.
+        logger.warning("[MRI Node] Text-report extraction failed to parse — not merging as a result.")
+        return {
+            "mri_report":         None,
+            "mri_service_failed": True,
+            "response":           _PARSE_FAILED_TEXT_MSG,
+            "next_phase":         "mri_requested",
+        }
+
+    # Path A (NIfTI/ensemble): the segmentation ensemble itself succeeded —
+    # we have REAL lesion counts/volumes/regions. Only the McDonald-criteria
+    # extraction step (an LLM call over the composed report text) failed.
+    # Report the real numbers honestly; do NOT claim a tier or risk statement
+    # — that part is genuinely unknown this time, not "normal".
+    total   = findings.get("lst_ai_total_lesions")
+    vol     = findings.get("lst_ai_total_volume_mm3")
+    regions = findings.get("lst_ai_regions", [])
+    region_lines = "; ".join(
+        f"{r.get('region', '?')}: {r.get('num_lesions', 0)} lesions" for r in regions
+    ) or "no regional breakdown available"
+    total_str = str(total) if total is not None else "an unknown number of"
+    vol_str   = f"{vol:.0f} mm³" if vol is not None else "an unknown volume"
+
+    message = (
+        f"Your scan has been processed — the segmentation found {total_str} "
+        f"lesion(s) (total volume {vol_str}). Regional breakdown: {region_lines}.\n\n"
+        "I wasn't able to automatically classify what these findings mean "
+        "against the McDonald criteria this time, so I can't give you a risk "
+        "level right now. Please share the full report with a neurologist for "
+        "direct review, or feel free to paste the report text here again and "
+        "I'll try once more.\n\n"
+        "This assessment is for clinical decision support only and is not a diagnosis."
+    )
+    logger.warning("[MRI Node] Ensemble succeeded but McDonald-criteria extraction failed to parse.")
+    return {
+        "mri_report":         findings,
+        "mri_service_failed": True,
+        "response":           message,
+        "next_phase":         "mri_requested",
+    }
+
+
 def _merge_mri_findings(state: AgentState, findings: dict, *, from_nifti: bool) -> dict:
     """
     Merge MRI findings into agent state, updating:
@@ -462,6 +524,9 @@ def _merge_mri_findings(state: AgentState, findings: dict, *, from_nifti: bool) 
       - dis_regions (union with validated region strings)
       - dit_episodes (ratchet up: dit_met → at least 2 episodes confirmed)
     """
+    if findings.get("parse_failed"):
+        return _handle_parse_failure(state, findings, from_nifti=from_nifti)
+
     _ORDER = ["LOW", "WATCH", "MODERATE", "HIGH", "CRITICAL_EMERGENCY"]
 
     # ── Tier ratchet ──────────────────────────────────────────────────────────
@@ -498,9 +563,20 @@ def _merge_mri_findings(state: AgentState, findings: dict, *, from_nifti: bool) 
         final, merged_dis, new_dit, mri_feats,
     )
 
+    # v18: build the patient-facing results message deterministically — see
+    # api/agent/tools/results_summary.py for why this can't be left to the
+    # (often weak/free-tier fallback) LLM alone. node_llm.py short-circuits
+    # on "mri_results_ready" the same way it already does for
+    # mri_service_failed, so this is guaranteed to reach the patient intact.
+    from api.agent.tools.results_summary import build_mri_results_message
+    results_message = build_mri_results_message(final, findings, merged_dis, new_dit)
+
     return {
         "mri_report":         findings,
         "mri_service_failed": False,
+        "mri_results_ready":  True,
+        "response":           results_message,
+        "next_phase":         "mri_received",
         "tier":               final,
         "features":           all_feats,
         "dis_regions":        merged_dis,

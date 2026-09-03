@@ -167,8 +167,18 @@ def node_goal_setter(state: AgentState) -> dict:
     # Without this, the LLM received a GATHER prompt with no MRI context and
     # responded "I'm a text-based assistant and cannot receive files" — wrong.
     # Routing to request_mri gives the LLM the 🔬 button instructions instead.
+    #
+    # v19 BUG FIX: this used to unconditionally set next_phase="mri_requested"
+    # "regardless of phase" — including when phase was ALREADY "mri_received"
+    # with a full report in hand. A patient mentioning wanting to upload
+    # another scan (e.g. "I have another mri from last year") would silently
+    # regress the phase and lose post_mri_guidance on every later turn, even
+    # though nothing was actually uploaded. A genuine new upload still always
+    # wins via PRIORITY 2 (nifti_paths present) regardless of phase, so this
+    # priority only needs to touch phase when we're not already past it.
     if _wants_to_upload_mri(user_msg):
-        return {"goal": "request_mri", "next_phase": "mri_requested"}
+        next_phase = "mri_requested" if phase != "mri_received" else phase
+        return {"goal": "request_mri", "next_phase": next_phase}
 
     # ── Phase: mri_requested ──────────────────────────────────────────────────
     if phase == "mri_requested":
@@ -214,21 +224,31 @@ def node_goal_setter(state: AgentState) -> dict:
         idx  = _tier_idx("HIGH")
         tier = "HIGH"
 
+    # v19 BUG FIX: `tier` above was previously a LOCAL variable used only to
+    # pick which goal to return — the McDonald-triggered HIGH upgrade was
+    # never included in the returned dict, so state["tier"] stayed at its
+    # old value. node_llm.py's conclude_with_mri prompt (and chat.py's
+    # "urgent" vs "routine" urgency flag sent to the frontend) both read
+    # tier straight from state, so a patient who clinically qualifies for
+    # HIGH under McDonald DIS/DIT criteria could still get non-urgent
+    # messaging. Every return below now includes "tier" so the (possibly
+    # just-elevated) value actually persists.
+
     if idx >= _tier_idx("HIGH"):
-        return {"goal": "conclude_with_mri", "next_phase": "mri_requested"}
+        return {"goal": "conclude_with_mri", "next_phase": "mri_requested", "tier": tier}
 
     if idx >= _tier_idx("MODERATE") and turns >= 2:
-        return {"goal": "conclude_with_mri", "next_phase": "mri_requested"}
+        return {"goal": "conclude_with_mri", "next_phase": "mri_requested", "tier": tier}
 
     # [v11.3 fix] WATCH with any confirmed features → MRI is clinically warranted.
     # Vague-but-real neurological symptoms should not silently conclude without imaging.
     if idx >= _tier_idx("WATCH") and turns >= 5:
         features = state.get("features", [])
         if features:
-            return {"goal": "conclude_with_mri", "next_phase": "mri_requested"}
-        return {"goal": "conclude", "next_phase": "concluded"}
+            return {"goal": "conclude_with_mri", "next_phase": "mri_requested", "tier": tier}
+        return {"goal": "conclude", "next_phase": "concluded", "tier": tier}
 
     if turns >= 6:
-        return {"goal": "conclude", "next_phase": "concluded"}
+        return {"goal": "conclude", "next_phase": "concluded", "tier": tier}
 
-    return {"goal": "gathering", "next_phase": "gathering"}
+    return {"goal": "gathering", "next_phase": "gathering", "tier": tier}
