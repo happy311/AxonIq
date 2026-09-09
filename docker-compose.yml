@@ -1,0 +1,61 @@
+version: "3.9"
+
+# ── NeuroCheck v8.0 — Docker Compose ─────────────────────────────────────────
+# Usage:
+#   docker compose up           → start everything
+#   docker compose up --build   → rebuild and start
+#   docker compose down         → stop and remove containers
+
+services:
+
+  # ── API Server ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: neurocheck-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SPACY_MODEL=/app/en_model
+      - PORT=8000
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    volumes:
+      # Mount source for hot-reload during development
+      - ./api:/app/api:ro
+      - ./frontend:/app/frontend:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.neurocheck.rule=Host(`neurocheck.yourdomain.com`)"
+      - "traefik.http.routers.neurocheck.tls=true"
+      - "traefik.http.routers.neurocheck.tls.certresolver=letsencrypt"
+
+  # ── Reverse Proxy (optional — for production with HTTPS) ────────────────────
+  # Uncomment this block to enable Traefik with automatic Let's Encrypt SSL.
+  # Update the domain in the api service labels above.
+  #
+  # proxy:
+  #   image: traefik:v3.0
+  #   container_name: traefik
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - ./traefik/acme.json:/acme.json
+  #   command:
+  #     - "--providers.docker=true"
+  #     - "--providers.docker.exposedbydefault=false"
+  #     - "--entrypoints.web.address=:80"
+  #     - "--entrypoints.websecure.address=:443"
+  #     - "--certificatesresolvers.letsencrypt.acme.email=your@email.com"
+  #     - "--certificatesresolvers.letsencrypt.acme.storage=/acme.json"
+  #     - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"

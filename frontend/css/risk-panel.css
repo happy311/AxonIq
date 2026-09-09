@@ -1,0 +1,113 @@
+/* AxonIQ — MS Risk Panel */
+
+#riskPanel {
+  flex: 2; min-width: 0;
+  background: #F8F5F0;
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  flex-shrink: 0;
+  transition: flex 0.22s ease, opacity 0.22s, max-width 0.22s;
+  overflow: hidden;
+}
+#riskPanel.hidden {
+  flex: 0; min-width: 0; max-width: 0;
+  opacity: 0; pointer-events: none; overflow: hidden;
+}
+
+.rp-header { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.rp-header span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+.rp-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 17px; padding: 0 2px; line-height: 1; }
+
+.rp-body { flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 4px; }
+.rp-body::-webkit-scrollbar { width: 5px; }
+.rp-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Idle state */
+.rp-idle { text-align: center; padding: 40px 16px; font-size: 13px; color: var(--muted); line-height: 1.8; }
+.rp-idle .idle-icon { font-size: 36px; margin-bottom: 12px; }
+
+/* Tier badge */
+.rp-tier { text-align: center; padding: 14px 0 10px; }
+.rp-tier-label { font-size: 20px; font-weight: 700; margin-bottom: 5px; font-family: 'Libre Baskerville', serif; }
+.rp-tier-sub   { font-size: 12px; color: var(--muted); }
+
+/* Tier colours */
+.tier-color-LOW                { color: #065F46; }
+.tier-color-WATCH              { color: #5B21B6; }
+.tier-color-MODERATE           { color: #1E40AF; }
+.tier-color-HIGH               { color: #92400E; }
+.tier-color-CRITICAL_EMERGENCY { color: #B91C1C; }
+
+/* Sections */
+.rp-section-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+
+.feature-list { display: flex; flex-direction: column; gap: 6px; }
+.feature-chip { font-size: 13px; padding: 7px 12px; border-radius: 8px; background: #fff; border: 0.5px solid var(--border); color: var(--text); line-height: 1.5; border-left: 3px solid var(--teal); }
+
+/* ── MRI Section ───────────────────────────────────────────────── */
+.mri-request-box {
+  background: var(--mri-bg);
+  border: 1.5px solid var(--mri-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+.mri-request-box .mri-title {
+  font-size: 13px; font-weight: 600;
+  color: var(--mri-text);
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 8px;
+}
+.mri-request-box p {
+  font-size: 12px; color: var(--muted);
+  line-height: 1.6; margin-bottom: 10px;
+}
+.mri-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--mri-border);
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  margin-bottom: 8px;
+}
+.mri-textarea:focus {
+  border-color: var(--mri-icon);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+.mri-textarea::placeholder { color: #B0A898; }
+.mri-submit-btn {
+  width: 100%;
+  padding: 9px;
+  background: var(--mri-text);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.mri-submit-btn:hover:not(:disabled)  { background: #1e3a8a; }
+.mri-submit-btn:disabled { background: #8FA8BF; cursor: not-allowed; }
+
+/* MRI done badge */
+.mri-done-box {
+  background: var(--mri-done-bg);
+  border: 1px solid var(--mri-done-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--mri-done-text);
+  display: flex; align-items: flex-start; gap: 8px;
+  line-height: 1.6;
+}
+.mri-done-box .mri-done-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }

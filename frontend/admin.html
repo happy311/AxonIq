@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AxonIQ — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:#0B1F3A;--teal:#0A7B74;--teal-lt:#E6F5F4;--red:#B53535;--amber:#C97B2A;
+    --sand:#F5F1EB;--warm-white:#FDFAF6;--border:#DDD8CF;--text:#1A1510;--muted:#6B6056;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--warm-white);color:var(--text);min-height:100vh;}
+
+  /* AUTH */
+  #authOverlay{position:fixed;inset:0;background:rgba(11,31,58,0.92);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:100;}
+  .auth-card{background:#fff;border-radius:16px;padding:40px 44px;width:400px;max-width:95vw;box-shadow:0 24px 64px rgba(0,0,0,0.35);}
+  .auth-logo{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
+  .auth-logo-mark{width:42px;height:42px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;font-family:'Libre Baskerville',serif;}
+  .auth-logo h2{font-family:'Libre Baskerville',serif;font-size:18px;color:var(--navy);font-weight:700;}
+  .auth-logo p{font-size:12px;color:var(--muted);}
+  .auth-field{margin-bottom:16px;}
+  .auth-field label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+  .auth-field input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none;transition:border-color 0.2s;}
+  .auth-field input:focus{border-color:var(--red);}
+  .auth-btn{width:100%;padding:12px;background:var(--navy);color:#fff;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:background 0.2s;}
+  .auth-btn:hover{background:#162F52;}
+  .auth-error{background:#FEE2E2;border:1px solid #FECACA;border-radius:8px;padding:9px 14px;font-size:13px;color:#B91C1C;margin-bottom:14px;display:none;}
+
+  /* SHELL */
+  #adminShell{display:none;}
+  #adminShell.visible{display:block;}
+  header{background:var(--navy);padding:14px 28px;display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--red);}
+  .logo-mark{width:34px;height:34px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Libre Baskerville',serif;font-size:15px;font-weight:700;color:#fff;}
+  .header-text h1{font-family:'Libre Baskerville',serif;font-size:17px;color:#fff;}
+  .header-text p{font-size:11px;color:#8FA8BF;}
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+  .hdr-stat{background:rgba(255,255,255,0.08);border-radius:8px;padding:6px 14px;text-align:center;}
+  .hdr-stat .n{font-size:18px;font-weight:700;color:#fff;font-family:'Libre Baskerville',serif;}
+  .hdr-stat .l{font-size:10px;color:#8FA8BF;margin-top:1px;}
+  .sign-out-btn{background:rgba(181,53,53,0.2);border:1px solid rgba(181,53,53,0.4);color:#F87171;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:500;cursor:pointer;transition:background 0.15s;}
+  .sign-out-btn:hover{background:rgba(181,53,53,0.35);}
+
+  /* LAYOUT */
+  .page{display:flex;height:calc(100vh - 59px);overflow:hidden;}
+
+  /* SIDEBAR */
+  .sidebar{width:280px;background:#F8F5F0;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+  .sidebar-section{padding:14px 16px 8px;border-bottom:1px solid var(--border);}
+  .sidebar-section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;}
+  .search-input{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;background:#fff;}
+  .search-input:focus{border-color:var(--teal);}
+  .user-list{flex:1;overflow-y:auto;padding:8px;}
+  .user-list::-webkit-scrollbar{width:4px;}
+  .user-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  .user-item{padding:10px 12px;border-radius:9px;cursor:pointer;transition:background 0.12s;margin-bottom:2px;}
+  .user-item:hover{background:#EDEBE6;}
+  .user-item.active{background:var(--teal-lt);border-left:3px solid var(--teal);}
+  .user-item-name{font-size:13px;font-weight:600;color:var(--text);}
+  .user-item-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+  .user-badge{display:inline-block;background:var(--teal-lt);color:var(--teal);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;margin-left:6px;}
+
+  /* MAIN */
+  .main{flex:1;overflow-y:auto;padding:24px 28px;}
+  .main::-webkit-scrollbar{width:6px;}
+  .main::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+  /* EMPTY STATE */
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--muted);}
+  .empty-state .icon{font-size:48px;opacity:0.4;}
+  .empty-state p{font-size:14px;}
+
+  /* USER HEADER */
+  .user-header{display:flex;align-items:center;gap:16px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);}
+  .user-avatar-lg{width:52px;height:52px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;}
+  .user-header-info h2{font-family:'Libre Baskerville',serif;font-size:20px;color:var(--navy);}
+  .user-header-info p{font-size:12px;color:var(--muted);margin-top:3px;}
+  .user-stats{display:flex;gap:16px;margin-left:auto;}
+  .user-stat{text-align:center;}
+  .user-stat .n{font-size:20px;font-weight:700;color:var(--navy);font-family:'Libre Baskerville',serif;}
+  .user-stat .l{font-size:11px;color:var(--muted);}
+
+  /* SESSIONS */
+  .sessions-grid{display:flex;flex-direction:column;gap:16px;}
+  .session-card{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .session-card-header{padding:14px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;background:#FAFAF8;border-bottom:1px solid var(--border);transition:background 0.12s;}
+  .session-card-header:hover{background:#F2F0EB;}
+  .session-card-header.open{background:var(--teal-lt);border-bottom-color:rgba(10,123,116,0.2);}
+  .session-icon{font-size:16px;}
+  .session-title-wrap{flex:1;min-width:0;}
+  .session-title{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .session-date{font-size:11px;color:var(--muted);margin-top:2px;}
+  .session-toggle{font-size:12px;color:var(--muted);transition:transform 0.2s;}
+  .session-toggle.open{transform:rotate(180deg);}
+  .session-body{display:none;padding:0;}
+  .session-body.open{display:block;}
+
+  /* MESSAGES */
+  .msg-row{display:flex;gap:12px;padding:14px 18px;border-bottom:1px solid #F0EDE8;}
+  .msg-row:last-child{border-bottom:none;}
+  .msg-row.human{background:#FAFAF8;}
+  .msg-row.assistant{background:#fff;}
+  .msg-role{width:80px;flex-shrink:0;}
+  .msg-role-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:0.4px;}
+  .msg-role-badge.human{background:#E0EAF4;color:#185FA5;}
+  .msg-role-badge.assistant{background:var(--teal-lt);color:var(--teal);}
+  .msg-content{flex:1;font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+  .msg-time{font-size:10px;color:#C0B8AF;flex-shrink:0;padding-top:2px;font-family:'DM Mono',monospace;}
+
+  /* EXPORT */
+  .export-bar{display:flex;gap:10px;margin-bottom:20px;align-items:center;}
+  .export-btn{padding:8px 18px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--text);transition:background 0.15s,border-color 0.15s;}
+  .export-btn:hover{background:var(--sand);border-color:var(--teal);}
+  .export-btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .export-btn.primary:hover{background:#162F52;}
+  .section-label{font-size:12px;color:var(--muted);margin-left:auto;}
+
+  /* LOADING */
+  .loading{display:flex;align-items:center;gap:8px;padding:20px;font-size:13px;color:var(--muted);}
+  .spin{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* LOGS */
+  .log-table{width:100%;border-collapse:collapse;font-size:12px;}
+  .log-table th{text-align:left;padding:8px 12px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);background:#FAFAF8;}
+  .log-table td{padding:8px 12px;border-bottom:1px solid #F0EDE8;vertical-align:top;color:var(--text);}
+  .log-table tr:hover td{background:#FAFAF8;}
+  .log-action{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+  .log-REGISTER{background:#D1FAE5;color:#065F46;}
+  .log-LOGIN{background:#DBEAFE;color:#1E40AF;}
+  .log-CHAT_MESSAGE{background:var(--teal-lt);color:var(--teal);}
+  .log-tabs{display:flex;gap:0;margin-bottom:20px;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;width:fit-content;}
+  .log-tab{padding:8px 20px;font-size:13px;font-weight:500;cursor:pointer;background:none;border:none;color:var(--muted);transition:background 0.15s,color 0.15s;}
+  .log-tab.active{background:var(--navy);color:#fff;}
+
+  /* CONCLUSION */
+  .conclusion-bar{background:#F8F5F0;border-top:1px solid var(--border);padding:12px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;}
+  .conclusion-tier{font-size:13px;font-weight:700;padding:3px 12px;border-radius:20px;white-space:nowrap;}
+  .tier-LOW{background:#D1FAE5;color:#065F46;}
+  .tier-WATCH{background:#EDE9FE;color:#5B21B6;}
+  .tier-MODERATE{background:#DBEAFE;color:#1E40AF;}
+  .tier-HIGH{background:#FEF3C7;color:#92400E;}
+  .tier-CRITICAL_EMERGENCY{background:#FEE2E2;color:#B91C1C;}
+  .conclusion-block{flex:1;min-width:180px;}
+  .conclusion-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
+  .conclusion-items{display:flex;flex-wrap:wrap;gap:4px;}
+  .conclusion-chip{font-size:11px;background:#fff;border:0.5px solid var(--border);border-radius:6px;padding:2px 8px;color:var(--text);}
+  .conclusion-action{font-size:12px;color:var(--text);line-height:1.5;font-style:italic;}
+  .no-conclusion{font-size:12px;color:var(--muted);padding:8px 18px;}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-mark">⚙</div>
+      <div><h2>AxonIQ Admin</h2><p>Restricted access — authorised personnel only</p></div>
+    </div>
+    <div id="authError" class="auth-error"></div>
+    <div class="auth-field">
+      <label>Username</label>
+      <input type="text" id="adminUser" placeholder="admin username" autocomplete="username">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="adminPass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="auth-btn" onclick="adminLogin()">Access Admin Panel</button>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div id="adminShell">
+  <header>
+    <div class="logo-mark">⚙</div>
+    <div class="header-text">
+      <h1>AxonIQ Admin</h1>
+      <p>User & Conversation Management</p>
+    </div>
+    <div class="header-right">
+      <div class="hdr-stat"><div class="n" id="statUsers">—</div><div class="l">Users</div></div>
+      <div class="hdr-stat"><div class="n" id="statSessions">—</div><div class="l">Sessions</div></div>
+      <div class="hdr-stat"><div class="n" id="statMessages">—</div><div class="l">Messages</div></div>
+      <button class="sign-out-btn" onclick="adminSignOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Users</div>
+        <input type="text" class="search-input" id="userSearch" placeholder="Search users…" oninput="filterUsers()">
+      </div>
+      <div class="user-list" id="userList">
+        <div class="loading"><div class="spin"></div> Loading users…</div>
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--border);">
+        <button class="new-chat-side" style="width:100%;" onclick="showAllLogs()">📋 View All Logs</button>
+      </div>
+    </div>
+
+    <div class="main" id="mainPanel">
+      <div class="empty-state">
+        <div class="icon">👤</div>
+        <p>Select a user from the sidebar to view their conversations</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let adminToken = sessionStorage.getItem('nc_admin_token') || null;
+let allUsers = [];
+let selectedUserId = null;
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('adminPass').addEventListener('keydown', e => { if(e.key==='Enter') adminLogin(); });
+  if (adminToken) showAdmin();
+});
+
+// ── Auth ──
+async function adminLogin() {
+  const user = document.getElementById('adminUser').value.trim();
+  const pass = document.getElementById('adminPass').value;
+  const err  = document.getElementById('authError');
+  err.style.display = 'none';
+  if (!user || !pass) { err.textContent='Fill in all fields'; err.style.display='block'; return; }
+
+  const form = new URLSearchParams();
+  form.append('username', user);
+  form.append('password', pass);
+
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:form
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Login failed');
+
+    // Check admin flag
+    const meRes = await fetch(`${API}/auth/me`, { headers:{'Authorization':`Bearer ${data.access_token}`} });
+    const me = await meRes.json();
+    if (!me.is_admin) throw new Error('Access denied — not an admin account');
+
+    adminToken = data.access_token;
+    sessionStorage.setItem('nc_admin_token', adminToken);
+    showAdmin();
+  } catch(e) {
+    err.textContent = e.message;
+    err.style.display = 'block';
+  }
+}
+
+function adminSignOut() {
+  sessionStorage.removeItem('nc_admin_token');
+  adminToken = null;
+  document.getElementById('adminShell').classList.remove('visible');
+  document.getElementById('authOverlay').style.display = 'flex';
+}
+
+function showAdmin() {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('adminShell').classList.add('visible');
+  loadDashboard();
+}
+
+function authFetch(path, opts={}) {
+  return fetch(`${API}${path}`, { ...opts, headers:{...(opts.headers||{}), 'Authorization':`Bearer ${adminToken}`} });
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const res = await authFetch('/admin/users');
+    const data = await res.json();
+    allUsers = data.users || [];
+    document.getElementById('statUsers').textContent = allUsers.length;
+    document.getElementById('statSessions').textContent = data.total_sessions || 0;
+    document.getElementById('statMessages').textContent = data.total_messages || 0;
+    renderUserList(allUsers);
+  } catch(e) { console.error(e); }
+}
+
+function renderUserList(users) {
+  const list = document.getElementById('userList');
+  if (!users.length) { list.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--muted)">No users found</div>'; return; }
+  list.innerHTML = users.map(u => `
+    <div class="user-item ${u.id===selectedUserId?'active':''}" onclick="selectUser(${u.id},'${escHtml(u.username)}','${escHtml(u.email)}','${u.created_at}',${u.session_count},${u.message_count})">
+      <div class="user-item-name">${escHtml(u.username)}<span class="user-badge">${u.session_count}</span>
+        ${u.latest_tier ? `<span class="conclusion-tier tier-${u.latest_tier}" style="font-size:9px;padding:1px 6px;margin-left:4px;">${u.latest_tier.replace('_',' ')}</span>` : ''}
+      </div>
+      <div class="user-item-meta">${escHtml(u.email)} · ${fmtDate(u.created_at)}</div>
+    </div>
+  `).join('');
+}
+
+function filterUsers() {
+  const q = document.getElementById('userSearch').value.toLowerCase();
+  renderUserList(allUsers.filter(u => u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+}
+
+// ── User Detail ──
+async function selectUser(id, username, email, createdAt, sessionCount, messageCount) {
+  selectedUserId = id;
+  document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.user-item').forEach(el => {
+    if (el.querySelector('.user-item-name').textContent.startsWith(username)) el.classList.add('active');
+  });
+
+  const main = document.getElementById('mainPanel');
+  main.innerHTML = `<div class="loading"><div class="spin"></div> Loading conversations…</div>`;
+
+  try {
+    const res = await authFetch(`/admin/user/${id}/sessions`);
+    const data = await res.json();
+    const sessions = data.sessions || [];
+
+    main.innerHTML = `
+      <div class="user-header">
+        <div class="user-avatar-lg">${username[0].toUpperCase()}</div>
+        <div class="user-header-info">
+          <h2>${escHtml(username)}</h2>
+          <p>${escHtml(email)} &nbsp;·&nbsp; Joined ${fmtDate(createdAt)}</p>
+        </div>
+        <div class="user-stats">
+          <div class="user-stat"><div class="n">${sessionCount}</div><div class="l">Sessions</div></div>
+          <div class="user-stat"><div class="n">${messageCount}</div><div class="l">Messages</div></div>
+          <button class="export-btn" style="margin-left:8px;" onclick="showUserLogs(${id},'${escHtml(username)}')">📋 Logs</button>
+          <button class="export-btn" style="margin-left:4px;border-color:#FECACA;color:var(--red);" onclick="resetPassword(${id},'${escHtml(username)}')">🔑 Reset PW</button>
+        </div>
+      </div>
+      <div class="export-bar">
+        <button class="export-btn primary" onclick="exportUserCSV(${id},'${username}')">⬇ Export CSV</button>
+        <button class="export-btn" onclick="exportUserJSON(${id},'${username}')">⬇ Export JSON</button>
+        <span class="section-label">${sessions.length} conversation${sessions.length!==1?'s':''}</span>
+      </div>
+      <div class="sessions-grid" id="sessionsGrid">
+        ${sessions.length === 0
+          ? '<div style="color:var(--muted);font-size:14px;padding:20px 0">No conversations yet.</div>'
+          : sessions.map((s,i) => renderSessionCard(s,i)).join('')}
+      </div>
+    `;
+  } catch(e) { main.innerHTML = `<div style="color:var(--red);padding:20px">Error loading sessions: ${e.message}</div>`; }
+}
+
+function renderSessionCard(s, idx) {
+  const msgs = s.messages || [];
+  const humanCount = msgs.filter(m=>m.role==='human').length;
+  const c = s.conclusion;
+
+  const conclusionHtml = c ? `
+    <div class="conclusion-bar">
+      <span class="conclusion-tier tier-${c.tier}">${escHtml(c.tier_label||c.tier)}</span>
+      ${c.symptoms && c.symptoms.length ? `
+        <div class="conclusion-block">
+          <div class="conclusion-label">Detected Symptoms</div>
+          <div class="conclusion-items">
+            ${c.symptoms.map(sym=>`<span class="conclusion-chip">${escHtml(sym)}</span>`).join('')}
+          </div>
+        </div>` : ''}
+      ${c.workup && c.workup.length ? `
+        <div class="conclusion-block">
+          <div class="conclusion-label">Recommended Workup</div>
+          <div class="conclusion-items">
+            ${c.workup.slice(0,3).map(w=>`<span class="conclusion-chip">${escHtml(w.substring(0,40)+(w.length>40?'…':''))}</span>`).join('')}
+          </div>
+        </div>` : ''}
+      ${c.action ? `
+        <div class="conclusion-block" style="flex:2">
+          <div class="conclusion-label">Clinical Action</div>
+          <div class="conclusion-action">${escHtml(c.action)}</div>
+        </div>` : ''}
+    </div>` : `<div class="no-conclusion">No MS classification recorded for this session</div>`;
+
+  return `
+    <div class="session-card">
+      <div class="session-card-header" onclick="toggleSession('sess_${idx}')">
+        <div class="session-icon">💬</div>
+        <div class="session-title-wrap">
+          <div class="session-title">${escHtml(s.title||'Untitled Chat')}
+            ${c ? `<span class="conclusion-tier tier-${c.tier}" style="margin-left:8px;font-size:11px;">${escHtml(c.tier_label||c.tier)}</span>` : ''}
+          </div>
+          <div class="session-date">${fmtDateFull(s.created_at)} &nbsp;·&nbsp; ${humanCount} message${humanCount!==1?'s':''} from user</div>
+        </div>
+        <div class="session-toggle" id="toggle_sess_${idx}">▼</div>
+      </div>
+      <div class="session-body" id="sess_${idx}">
+        ${conclusionHtml}
+        ${msgs.map(m => `
+          <div class="msg-row ${m.role}">
+            <div class="msg-role"><span class="msg-role-badge ${m.role}">${m.role==='human'?'Patient':'AxonIQ'}</span></div>
+            <div class="msg-content">${escHtml(m.content)}</div>
+            <div class="msg-time">${fmtTime(m.created_at)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function toggleSession(id) {
+  const body   = document.getElementById(id);
+  const toggle = document.getElementById('toggle_'+id);
+  const header = body.previousElementSibling;
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  toggle.classList.toggle('open', !isOpen);
+  header.classList.toggle('open', !isOpen);
+}
+
+// ── Export ──
+async function exportUserCSV(userId, username) {
+  const res  = await authFetch(`/admin/user/${userId}/sessions`);
+  const data = await res.json();
+  const rows = [['username','session_title','role','content','timestamp']];
+  for (const s of (data.sessions||[])) {
+    for (const m of (s.messages||[])) {
+      rows.push([username, s.title||'', m.role, m.content.replace(/"/g,'""'), m.created_at]);
+    }
+  }
+  const csv = rows.map(r => r.map(c=>`"${c}"`).join(',')).join('\n');
+  download(`axoniq_${username}.csv`, csv, 'text/csv');
+}
+
+async function exportUserJSON(userId, username) {
+  const res  = await authFetch(`/admin/user/${userId}/sessions`);
+  const data = await res.json();
+  download(`axoniq_${username}.json`, JSON.stringify(data, null, 2), 'application/json');
+}
+
+function download(filename, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type}));
+  a.download = filename;
+  a.click();
+}
+
+// ── Utils ──
+function escHtml(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); } catch{return iso;}
+}
+function fmtDateFull(iso) {
+  try { return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch{return iso;}
+}
+function fmtTime(iso) {
+  try {
+    const d=new Date(iso), now=new Date();
+    return d.toDateString()===now.toDateString()
+      ? d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      : d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  } catch{return iso;}
+}
+
+// ── Logs ──
+async function showAllLogs() {
+  selectedUserId = null;
+  document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+  const main = document.getElementById('mainPanel');
+  main.innerHTML = `<div class="loading"><div class="spin"></div> Loading logs…</div>`;
+  try {
+    const res  = await authFetch('/admin/logs');
+    const data = await res.json();
+    renderLogsTable(main, data.logs || [], 'All User Activity');
+  } catch(e) { main.innerHTML = `<div style="color:var(--red);padding:20px">Error: ${e.message}</div>`; }
+}
+
+async function showUserLogs(userId, username) {
+  const main = document.getElementById('mainPanel');
+  const logsDiv = document.getElementById(`user_logs_${userId}`);
+  if (logsDiv) { logsDiv.remove(); return; }
+  try {
+    const res  = await authFetch(`/admin/user/${userId}/logs`);
+    const data = await res.json();
+    const logs  = data.logs || [];
+    const container = document.createElement('div');
+    container.id = `user_logs_${userId}`;
+    container.style.marginTop = '20px';
+    renderLogsTable(container, logs, `Activity Log — ${username}`);
+    main.appendChild(container);
+    container.scrollIntoView({behavior:'smooth'});
+  } catch(e) { console.error(e); }
+}
+
+function renderLogsTable(container, logs, title) {
+  if (!logs.length) {
+    container.innerHTML = `<h3 style="font-family:'Libre Baskerville',serif;font-size:17px;color:var(--navy);margin-bottom:16px;">${title}</h3><p style="color:var(--muted);font-size:13px;">No activity logged yet.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="font-family:'Libre Baskerville',serif;font-size:17px;color:var(--navy);">${title}</h3>
+      <span style="font-size:12px;color:var(--muted);">${logs.length} events</span>
+    </div>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Detail</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${logs.map(l => `
+          <tr>
+            <td style="font-family:'DM Mono',monospace;white-space:nowrap;color:var(--muted);">${fmtTime(l.created_at)}</td>
+            <td style="font-weight:500;">${escHtml(l.username||'—')}</td>
+            <td><span class="log-action log-${l.action}">${l.action}</span></td>
+            <td style="max-width:320px;word-break:break-word;">${escHtml(l.detail||'—')}</td>
+            <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">${escHtml(l.ip_address||'—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+async function resetPassword(userId, username) {
+  if (!confirm(`Reset password for ${username}? A new random password will be generated.`)) return;
+  try {
+    const res  = await authFetch(`/admin/user/${userId}/reset-password`, {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    alert(`✅ Password reset for ${data.username}\n\nNew password: ${data.new_password}\n\nShare this with the user securely.`);
+  } catch(e) { alert(`Error: ${e.message}`); }
+}
+</script>
+</body>
+</html>

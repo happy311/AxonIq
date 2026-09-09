@@ -1,0 +1,472 @@
+[
+  {
+    "text": "McDonald Criteria 2024: MS diagnosis requires dissemination in space (DIS) and dissemination in time (DIT). DIS: lesions in \u22652 CNS regions \u2014 periventricular, cortical/juxtacortical, infratentorial, spinal cord, optic nerve. DIT: new T2/gadolinium lesion on follow-up MRI, or simultaneous enhancing + non-enhancing lesions on a single scan.",
+    "meta": {
+      "source": "McDonald_Criteria_2024",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "MS Workup Standard (age 16-60): MRI orbits with/without contrast \u2014 screen for optic nerve involvement, establish optic neuritis. MRI brain and spinal cord with/without contrast. Lumbar puncture: CSF oligoclonal bands >2 exclusive to CSF, elevated IgG index, elevated IgG synthesis rate, kappa free light chains. Cell count <50, protein and glucose normal. Serum cell-based assay for NMO (AQP4-IgG) and MOGAD (MOG-IgG). Mimics to exclude: sarcoidosis, lupus, vasculitis, B12 deficiency, cervical myelopathy.",
+    "meta": {
+      "source": "MS_Workup_Protocol",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "Optic Neuritis (ON) classic triad: monocular visual loss + pain on eye movement + dyschromatopsia (red colour desaturation, washed-out colours). Peak age 20-45, female predominance. Uhthoff phenomenon: vision worsens with heat, exercise, hot shower, fever. Recovery in 85% within 3 months. Risk of MS after first ON episode: 50% at 15 years. Workup: MRI orbits with gadolinium, MRI brain.",
+    "meta": {
+      "source": "NINDS_Optic_Neuritis",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "NMOSD (Neuromyelitis Optica Spectrum Disorder): AQP4-IgG positive (cell-based assay). Area postrema syndrome: intractable hiccups + nausea/vomiting \u2014 pathognomonic for NMO. LETM: longitudinally extensive transverse myelitis >3 vertebral segments. Bilateral or severe optic neuritis. Periependymal brain lesions. Distinguished from MS by AQP4-IgG serum cell-based assay. Simultaneous painless bilateral vision loss flags NMO over MS.",
+    "meta": {
+      "source": "NMOSD_Guidelines",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "MOGAD (MOG-Antibody Associated Disease): MOG-IgG positive on cell-based assay. ADEM-like presentation: large hazy confluent white matter lesions post-viral illness. Both eyes painful following flu-like illness \u2014 flags ADEM/MOGAD. Optic perineuritis (sheath enhancement, not nerve). Conus medullaris involvement. NLP (no light perception) severe vision loss in one eye flags MOGAD. Younger patients, often monophasic. Differentiated by MOG-IgG cell-based assay.",
+    "meta": {
+      "source": "MOGAD_Guidelines",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "MS Anchor Symptoms \u2014 always trigger full MS workup: Lhermitte's sign: electric shock down spine on neck flexion \u2014 pathognomonic for cervical cord demyelination. Uhthoff phenomenon: any MS symptom worsening with heat, exercise, fever, hot bath. MS hug: tight band sensation around trunk/chest \u2014 thoracic cord lesion. Internuclear ophthalmoplegia (INO): failure of eye adduction on lateral gaze + contralateral nystagmus \u2014 MLF lesion. Bilateral INO is pathognomonic for MS.",
+    "meta": {
+      "source": "MS_Anchor_Symptoms",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "IIH vs MS in obese patients: IIH (idiopathic intracranial hypertension) presents with papilledema, headache, pulsatile tinnitus in obese females. Critical: IIH should NOT cause early colour vision loss (dyschromatopsia). If colour perception is impaired in an IIH patient \u2192 suspect concurrent optic neuritis \u2192 MS workup. Heavy legs, motor symptoms, cerebellar signs, or prior transient neurological episodes in obese patients must trigger full MS workup even if IIH is the primary diagnosis. Pain on eye movement in an obese patient with disc swelling = optic neuritis until proven otherwise.",
+    "meta": {
+      "source": "IIH_MS_Overlap",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "CSF Analysis in MS: Oligoclonal bands (OCBs) >2 exclusive to CSF (not in paired serum) \u2014 present in 85-95% of MS cases. IgG index >0.7 (elevated). IgG synthesis rate elevated. Kappa free light chains: substitute for OCBs where testing unavailable. Cell count <50 lymphocytes. Glucose and protein usually nondescript/normal. Paired serum-CSF sample essential for OCB interpretation. LP is part of standard MS workup alongside MRI brain, orbits, and spinal cord.",
+    "meta": {
+      "source": "CSF_MS_Protocol",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "Eye Movement Disorders in MS: INO (internuclear ophthalmoplegia): eye cannot adduct on lateral gaze, contralateral eye nystagmus \u2014 MLF lesion. Sixth nerve palsy: lateral gaze palsy. Skew deviation: vertical misalignment, patient tilts head to align images. Oscillopsia: room appears to wiggle, objects jump \u2014 gaze-evoked nystagmus. World splits when looking to one side \u2014 diplopia from brainstem lesion. Any new diplopia or eye movement abnormality in young adult \u2014 MS must be excluded with MRI brain.",
+    "meta": {
+      "source": "MS_Eye_Movement_Disorders",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "Trigeminal Neuralgia (TN) in MS: Electric shock face/jaw pain in patients under 45. In young patients without vascular loop compression on MRI, MS pons lesion must be excluded. MRI brain with specific pons/brainstem protocol required. Facial numbness + diplopia = brainstem MS lesion until proven otherwise. Sharp facial shocks + faded colours = TN + optic neuritis \u2192 MS relapse. V1/V2 facial pain + pain on eye movement = pons lesion + optic neuritis overlap. History of prior optic neuritis + new facial pain = MS relapse, not new condition.",
+    "meta": {
+      "source": "TN_MS_Brainstem",
+      "category": "guidelines"
+    }
+  },
+  {
+    "text": "Case 001 \u2014 Optic Neuritis: 26yo female. 4-day history of worsening vision blurring in left eye. Pain behind the globe exacerbated by looking up or side-to-side. Colors look washed out, specifically red, at a stoplight. AI anchor: monocular involvement + pain with eye movement + red colour desaturation. Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "001",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 002 \u2014 Optic Neuritis: 31yo male. Sudden smudge in central vision. Denies trauma. Red colour appears faded and profound. Onset over 72 hours. No prior neurology history. AI anchor: monocular central scotoma + dyschromatopsia (red fading). Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "002",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 003 \u2014 Optic Neuritis: 22yo female. Ache behind the eye followed by foggy vision. Central blurriness or loss of vision (scotoma) making reading difficult. Monocular at presentation. AI anchor: retrobulbar ache + central scotoma + monocular involvement. Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "003",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 004 \u2014 Optic Neuritis: 28yo female. Left eye dimming. Patient states it is like looking through dirty water. Pain on eye movement preceded the vision loss by 24 hours. AI anchor: monocular dimming + dirty water vision + pain before vision loss. Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "004",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 005 \u2014 Optic Neuritis: 35yo male. Rapidly evolving vision loss. Everything looks greyed out in the right eye. AI anchor: rapid monocular vision loss + greyed-out vision (dyschromatopsia). Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "005",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 006 \u2014 Optic Neuritis: 24yo female. Noticed visual deficit while applying makeup. Blurring in one eye. No redness or discharge. Significant eye soreness. AI anchor: monocular blurring + eye soreness without redness (retrobulbar). Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "006",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 007 \u2014 Optic Neuritis with Uhthoff: 29yo female. Reports transient obscurations. Vision shimmers when she gets out of a hot shower (Uhthoff phenomenon). AI anchor: transient visual obscurations + Uhthoff phenomenon (heat-triggered). Diagnosis consideration: Optic Neuritis + Uhthoff \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "007",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 008 \u2014 Optic Neuritis: 27yo male. Sub-acute loss of visual clarity. Describes the world as less vibrant in one eye. Progressive over 1 week, now stabilizing. AI anchor: monocular sub-acute vision loss + less vibrant colours. Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "008",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 009 \u2014 Optic Neuritis: 33yo female. Classic blur in one eye. Patient mentions a pulling sensation behind the eye. Significant fading of colors. AI anchor: retrobulbar pulling sensation + monocular blur + colour fading. Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "009",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 010 \u2014 Optic Neuritis: 30yo female. Can see faces but misses the edges of objects. Painful eye movements confirmed. AI anchor: peripheral visual field loss + confirmed pain on eye movement. Diagnosis consideration: Optic Neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "010",
+      "category": "optic_neuritis"
+    }
+  },
+  {
+    "text": "Case 011 \u2014 IIH/MS Overlap: 38yo female, 145kg. Bilateral disc swelling on exam. Headaches for weeks. AI must consider MS even if IIH is the primary diagnosis. Bilateral disc swelling in obese patient \u2014 IIH likely, but MS workup mandatory. Diagnosis consideration: IIH primary, MS must be excluded.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "011",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 012 \u2014 IIH/MS Overlap: 32yo female, 150kg. Chronic buzzing noise in the ears (pulsatile tinnitus). Presents with blurring and pain in one eye. AI anchor: obese + pulsatile tinnitus (IIH) + unilateral eye pain and blurring (ON). Diagnosis consideration: IIH + concurrent optic neuritis \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "012",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 013 \u2014 IIH/MS Overlap: 25yo female, 135kg. Diagnosed elsewhere as IIH. Mentions faded colours in the right eye recently. Critical: IIH should not kill colour perception this early. Faded colours = dyschromatopsia = optic neuritis. AI anchor: IIH diagnosis + new colour fading = optic neuritis superimposed on IIH. Diagnosis consideration: MS workup urgently required despite IIH label.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "013",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 014 \u2014 IIH/MS Overlap with Spinal Cord: 40yo female, 140kg. Eye doctor says eyes are abnormal. Patient complains of heavy legs when walking to the clinic. AI must flag spinal cord involvement. Heavy legs + abnormal eye exam = MS. AI anchor: obese + abnormal eye exam + heavy legs (corticospinal tract). Diagnosis consideration: MS workup required, flag spinal cord involvement.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "014",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 015 \u2014 IIH/MS Overlap with Prior Episode: 29yo female, obese. Blurring in both eyes. History of numbness in fingertips last monsoon (prior CIS episode). Occasional falls. AI anchor: obese + bilateral blurring + prior transient numbness (DIT) + falls. Diagnosis consideration: MS workup required \u2014 prior episode satisfies DIT criterion.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "015",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 016 \u2014 IIH/MS with Uhthoff: 34yo female, 155kg. Visual field abnormality on examination (vision loss). Worsening of symptoms during exercise \u2014 Uhthoff phenomenon. AI anchor: obese + visual field loss + Uhthoff phenomenon (exercise-triggered worsening). Diagnosis consideration: MS workup required \u2014 Uhthoff is an MS anchor feature.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "016",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 017 \u2014 IIH/MS with Cerebellar Signs: 31yo female, 148kg. Doctor noted swelling on eye examination (disc swelling/papilledema). Patient reports clumsiness and dropping keys. AI must pivot to cerebellar check \u2014 dropping keys + clumsiness = cerebellar or corticospinal involvement. AI anchor: obese + disc swelling + clumsiness + dropping objects (cerebellar). Diagnosis consideration: MS workup required \u2014 cerebellar involvement flagged.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "017",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 018 \u2014 IIH/MS with Hidden ON: 27yo female, 160kg. Persistent new headache in the temple for the past month. AI must find: right eye pain on moving the eye side to side. AI anchor: obese + temple headache + pain on lateral eye movement (optic neuritis hidden in IIH). Diagnosis consideration: MS workup required \u2014 eye pain on movement = optic neuritis.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "018",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 019 \u2014 Classic ON in Obese Patient: 36yo female, 138kg. Sent in for IIH workup. Notes from the doctor: vision loss is painful and monocular. Painful monocular vision loss in obese patient = classic optic neuritis. AI anchor: obese + painful monocular vision loss = optic neuritis regardless of weight. Diagnosis consideration: MS workup required \u2014 classic ON in IIH workup context.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "019",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 020 \u2014 IIH/MS with Prior CIS: 33yo female, high BMI. Transient tingling and numbness that lasted for one week in the left hand 2 years ago. AI anchor: obese + prior transient limb numbness 2 years ago (clinically isolated syndrome, DIT). Diagnosis consideration: MS workup required \u2014 prior CIS episode satisfies DIT criterion.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "020",
+      "category": "obesity_papilledema"
+    }
+  },
+  {
+    "text": "Case 021 \u2014 Brainstem/Diplopia: 28yo male. World splits when looking to the left. No ocular pain. Painless diplopia on lateral gaze \u2014 brainstem lesion. AI anchor: world splits on left gaze (lateral gaze palsy / INO) \u2014 no pain. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "021",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 022 \u2014 INO: 30yo female. Eyes jiggle when looking to the left. Exam shows right eye adduction lag with left eye nystagmus \u2014 internuclear ophthalmoplegia (INO). INO = MLF lesion. Bilateral INO pathognomonic for MS. AI anchor: eye jiggling on lateral gaze + adduction lag + nystagmus = INO. Diagnosis consideration: MS \u2014 MLF lesion, MS workup urgently required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "022",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 023 \u2014 Oscillopsia: 26yo female. Reports the room is wiggling (oscillopsia). Constant gaze-evoked nystagmus \u2014 wiggly movements of objects. AI anchor: oscillopsia + gaze-evoked nystagmus = cerebellar/brainstem lesion. Diagnosis consideration: MS brainstem/cerebellar lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "023",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 024 \u2014 Diplopia with Gait: 35yo male. Sudden onset double vision, worse looking at distant objects. Painless. Problems with walking, always trying to steady himself (spinal cord/brainstem/corticospinal tract). AI anchor: painless diplopia + gait unsteadiness + balance problems = brainstem + spinal cord. Diagnosis consideration: MS \u2014 brainstem + spinal cord involvement, MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "024",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 025 \u2014 Skew Deviation: 24yo female. Seeing double when looking up or down. Patient tilts head to align the images (skew deviation). AI anchor: vertical diplopia + head tilt to align = skew deviation = brainstem lesion. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "025",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 026 \u2014 Bilateral Gaze Palsy: 31yo male. Doctor finds movement abnormalities in both eyes. Cannot move either eye toward the nose on side-glance (bilateral adduction failure). Bilateral eye movement abnormality = bilateral MLF lesion = pathognomonic for MS. AI anchor: bilateral eye movement deficit + cannot adduct = bilateral INO = MS. Diagnosis consideration: MS \u2014 bilateral INO pathognomonic, urgent MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "026",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 027 \u2014 Diplopia with Brainstem Overlap: 29yo female. New-onset diplopia. Also reports numbness in the right cheek (brainstem overlap \u2014 trigeminal involvement). AI anchor: diplopia + facial numbness = two brainstem symptoms = brainstem MS lesion. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "027",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 028 \u2014 Diplopia with Swallowing: 33yo male. Seeing two images, worse toward end of day with occasional swallowing difficulty. No eye drooping. AI must differentiate from Myasthenia Gravis (MG): MG has ptosis (drooping) and fatigable diplopia. No ptosis here \u2014 MS brainstem lesion more likely than MG. AI anchor: diplopia + dysphagia without ptosis = brainstem MS over MG. Diagnosis consideration: MS brainstem lesion \u2014 MG less likely without ptosis.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "028",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 029 \u2014 Oscillopsia with Poor Balance: 27yo female. Objects jump when she tries to focus. Poor balance on walking. AI anchor: jumping objects (oscillopsia) + poor balance = cerebellar/brainstem MS lesion. Diagnosis consideration: MS \u2014 cerebellar + brainstem involvement, MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "029",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 030 \u2014 INO with Seasick Feeling: 30yo female. Eyes are crooked and jiggly. Patient feels seasick. AI anchor: crooked jiggly eyes + seasick feeling = INO + vestibular brainstem involvement. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "030",
+      "category": "brainstem_diplopia"
+    }
+  },
+  {
+    "text": "Case 031 \u2014 TN + Optic Neuritis: 25yo female. Severe face pain. Sudden electric shocks in upper or lower jaw. Visual blurring in left eye. AI anchor: young patient + electric jaw shocks (TN) + monocular blurring = pons lesion + ON. Diagnosis consideration: MS \u2014 pons lesion (TN) + optic neuritis, urgent MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "031",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 032 \u2014 TN + Dyschromatopsia: 29yo male. Severe facial pain for 2 weeks. Stabbing sensations. Reports red-green colour loss in right eye. AI anchor: young male + stabbing facial pain (TN) + red-green colour loss (dyschromatopsia/ON). Diagnosis consideration: MS \u2014 pons TN lesion + concurrent optic neuritis, MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "032",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 033 \u2014 TN Young Patient: 32yo female. Severe facial and eye pain in a young patient. AI must trigger pons lesion search. Young age + facial pain + eye pain = MS pons lesion. AI anchor: young patient + facial pain + eye pain = pons lesion until proven otherwise. Diagnosis consideration: MS \u2014 pons lesion, MRI brain with pons protocol urgently required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "033",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 034 \u2014 Facial Numbness + Diplopia: 27yo female. Facial numbness followed by diplopia. Sub-acute onset. AI anchor: facial numbness (trigeminal) + diplopia (6th nerve / MLF) = two brainstem symptoms = MS. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "034",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 035 \u2014 TN with Motor: 24yo male. Face and jaw pain triggered by cold wind. Reports heavy arm on the same side. AI anchor: cold-wind triggered jaw pain (TN) + ipsilateral heavy arm (corticospinal) = MS. Diagnosis consideration: MS \u2014 brainstem TN + motor tract involvement, MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "035",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 036 \u2014 TN with Prior ON History: 31yo female. On and off facial pain. History mentions optic neuritis 3 years prior. AI anchor: prior optic neuritis (DIT) + new facial pain (TN) = MS relapse. Diagnosis consideration: MS \u2014 prior ON + new TN satisfies DIS and DIT, urgent MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "036",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 037 \u2014 Sharp Facial Shocks + Faded Colours: 28yo female. Sharp facial shocks. Patient cannot brush teeth (touch-triggered TN). Faded colours noted. AI anchor: touch-triggered facial shocks (TN) + faded colours (dyschromatopsia/ON) = MS relapse. Diagnosis consideration: MS \u2014 pons TN + concurrent optic neuritis, MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "037",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 038 \u2014 Facial Numbness + Formication: 35yo male. Facial numbness and eyes feel like they are spinning in their sockets. Feels like a bug crawling on face (formication). AI anchor: facial numbness + formication (bug crawling) + oscillopsia = brainstem + sensory MS. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "038",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 039 \u2014 Severe Facial Pain + Jumpy Vision: 26yo female. Severe facial pain. Vision is jumpy (oscillopsia). AI anchor: severe facial pain (TN) + jumpy vision (oscillopsia/nystagmus) = brainstem MS. Diagnosis consideration: MS brainstem lesion \u2014 MS workup required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "039",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 040 \u2014 V1/V2 Pain + Eye Movement Pain: 30yo male. Facial pain in V1/V2 distribution. Pain on eye movement on the left. AI anchor: V1/V2 trigeminal pain + pain on eye movement = pons TN lesion + optic neuritis overlap. Diagnosis consideration: MS \u2014 brainstem pons lesion + optic neuritis, urgent MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "040",
+      "category": "trigeminal_brainstem"
+    }
+  },
+  {
+    "text": "Case 041 \u2014 Bilateral Painless Vision Loss (NMO/MS): 22yo female. Simultaneous vision loss in both eyes. Painless. Bilateral painless vision loss flags NMOSD primarily, but MS must not be forgotten. AI anchor: bilateral + painless vision loss = NMO flag, but MS workup required. Diagnosis consideration: NMOSD primary \u2014 AQP4-IgG serum assay + full MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "041",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 042 \u2014 NLP Severe Vision Loss (MOGAD): 29yo female. No light perception (NLP) in right eye. Severe onset. NLP severity flags MOGAD (MOG-antibody associated disease) primarily. AI anchor: NLP vision loss = MOGAD flag \u2014 MOG-IgG serum cell-based assay. Diagnosis consideration: MOGAD primary \u2014 MOG-IgG assay + MS workup to exclude.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "042",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 043 \u2014 Altitudinal Vision Loss (Stroke/MS): 35yo male. Vision is gone \u2014 bottom half gone. Sudden onset. Altitudinal vision loss = flag for stroke. Patient is young \u2014 MS must be central to evaluation. AI anchor: sudden altitudinal vision loss in young adult = stroke flag + MS workup both required. Diagnosis consideration: Stroke urgent exclusion, MS workup also required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "043",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 044 \u2014 Chronic Progressive Vision Loss (Tumour): 45yo female. Chronic, progressive vision loss over 1 year. No pain. Painless progressive vision loss over 1 year flags tumour/compressive lesion over MS. AI anchor: painless chronic progressive monocular vision loss over 1 year = tumour flag. Diagnosis consideration: Tumour/compressive lesion primary \u2014 neuroimaging urgent.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "044",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 045 \u2014 Temple Pain with Flickering Lights (Migraine): 30yo female. Pain in the temple with flickering lights lasting 20 minutes. Flickering lights lasting 20 minutes = migraine aura \u2014 not MS. AI anchor: temple pain + flickering lights (20 min duration) = migraine aura, not MS. Diagnosis consideration: Migraine aura \u2014 MS less likely, but exclude if other symptoms present.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "045",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 046 \u2014 Black Spots in Eyes (Leber's/Toxic): 28yo male. Black spots in eyes. Painless. Painless black spots (floaters or fixed scotoma) = Leber hereditary optic neuropathy or toxic. AI anchor: painless black spots = Leber/toxic flag \u2014 not typical MS presentation. Diagnosis consideration: Leber's or toxic optic neuropathy \u2014 genetics + toxicology screen.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "046",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 047 \u2014 Red Painful Eye + Vision Loss (Uveitis/Mimic): 33yo female. Red painful eye with vision loss. Red eye + vision loss = uveitis or other MS mimic \u2014 MS always in consideration but mimic first. AI anchor: red eye + vision loss = mimic flag (uveitis, scleritis) \u2014 MS in differential. Diagnosis consideration: Uveitis/MS mimic primary \u2014 ophthalmology referral + MS workup.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "047",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 048 \u2014 Post-Viral Bilateral Eye Pain (ADEM): 24yo female. Both eyes are painful following a flu-like illness. Bilateral eye pain post-viral illness = ADEM (acute disseminated encephalomyelitis) flag. AI anchor: bilateral painful vision loss + recent flu-like illness = ADEM/MOGAD. Diagnosis consideration: ADEM primary \u2014 MOG-IgG serum + MS workup to exclude.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "048",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 049 \u2014 Rapid Vision Loss + Hiccups + Vomiting (NMO Area Postrema): 31yo male. Rapid total vision loss. Patient has hiccups and vomiting \u2014 area postrema syndrome. Hiccups + vomiting = area postrema syndrome = major NMO alert. AI anchor: rapid vision loss + intractable hiccups + vomiting = NMO area postrema syndrome. Diagnosis consideration: NMOSD \u2014 AQP4-IgG cell-based assay urgently required.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "049",
+      "category": "mimics_safety"
+    }
+  },
+  {
+    "text": "Case 050 \u2014 Moving Dark Spot / Floaters (Retinal): 27yo female. A dark spot that moves. Describes floaters. Moving dark spots = floaters = retinal or vitreous issue \u2014 not MS. AI anchor: moving dark spot + floaters = ocular/retinal flag \u2014 not MS presentation. Diagnosis consideration: Retinal/vitreous issue \u2014 ophthalmology referral, MS unlikely.",
+    "meta": {
+      "source": "MS_Cases_Doc",
+      "case": "050",
+      "category": "mimics_safety"
+    }
+  }
+]

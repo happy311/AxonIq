@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# MRI checkpoints — large binaries, don't belong in git.
+# Keep the folder itself (README + .gitkeep) but ignore the actual weights.
+checkpoints/*.pt
+checkpoints/*.pth
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Local data
+/data/
+*.db
+*.sqlite3
+
+# MRI engine scratch space (if ever run outside Docker)
+/tmp_mri/
+
+# OS / editor
+.DS_Store
+.vscode/

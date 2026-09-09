@@ -1,0 +1,234 @@
+/* AxonIQ — Chat Area: Messages, Bubbles, Input */
+
+.chat-wrapper { flex: 3; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.disclaimer-bar { background: transparent; border-bottom: 0.5px solid var(--border); padding: 4px 16px; font-size: 10px; color: var(--muted); text-align: center; flex-shrink: 0; opacity: 0.6; }
+.chat-container { flex: 1; display: flex; flex-direction: column; width: 100%; padding: 0 20px; overflow: visible; min-height: 0; }
+
+/* Message list */
+.messages { flex: 1; overflow-y: auto; padding: 24px 0 16px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Welcome screen */
+.welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; padding: 40px 20px; }
+.welcome-icon { width: 72px; height: 72px; background: var(--teal-lt); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 4px; }
+.welcome h2 { font-family: 'Libre Baskerville', serif; font-size: 22px; color: var(--navy); }
+.welcome p  { font-size: 14px; color: var(--muted); max-width: 480px; line-height: 1.7; }
+.welcome-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+.chip { background: var(--sand); border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-size: 13px; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.chip:hover { background: var(--teal-lt); border-color: var(--teal); color: var(--navy); }
+
+/* Message bubbles */
+.msg-row { display: flex; align-items: flex-end; gap: 10px; animation: fadeUp 0.3s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.msg-row.user { flex-direction: row-reverse; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.avatar.ai   { background: var(--teal-lt); color: var(--teal); font-weight: 700; font-family: 'Libre Baskerville', serif; }
+.avatar.user { background: var(--navy); color: #fff; font-size: 12px; }
+.bubble { max-width: 72%; padding: 14px 18px; border-radius: 18px; font-size: 14px; line-height: 1.7; }
+.bubble.ai   { background: var(--bubble-ai); border: 1px solid var(--border); border-bottom-left-radius: 4px; color: var(--text); }
+.bubble.user { background: var(--bubble-user); color: #E8F0F8; border-bottom-right-radius: 4px; }
+.msg-ts { font-size: 10px; color: #C0B8AF; margin-top: 4px; }
+.msg-row.user .msg-ts { text-align: right; }
+
+/* Typing indicator */
+.typing-bubble { background: var(--bubble-ai); border: 1px solid var(--border); border-bottom-left-radius: 4px; padding: 14px 18px; border-radius: 18px; display: flex; gap: 4px; align-items: center; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); opacity: 0.6; animation: bounce 1.2s infinite ease-in-out; }
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,80%,100% { transform: scale(0.8); opacity: .4; } 40% { transform: scale(1.2); opacity: 1; } }
+
+/* Input area */
+.input-area { border-top: 1px solid var(--border); padding: 14px 0 18px; flex-shrink: 0; }
+.input-row { display: flex; gap: 10px; align-items: flex-end; }
+.msg-input { flex: 1; min-height: 48px; max-height: 160px; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.5; color: var(--text); background: #fff; resize: none; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.msg-input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(10,123,116,0.1); }
+.msg-input::placeholder { color: #B0A898; }
+.send-btn { width: 48px; height: 48px; background: var(--navy); color: #fff; border: none; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.1s; flex-shrink: 0; }
+.send-btn:hover:not(:disabled) { background: #162F52; }
+.send-btn:active:not(:disabled) { transform: scale(0.95); }
+.send-btn:disabled { background: #8FA8BF; cursor: not-allowed; }
+.send-btn svg { width: 20px; height: 20px; }
+
+/* Input controls row */
+.input-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.session-id { font-size: 11px; color: #C0B8AF; font-family: monospace; }
+.new-chat-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 12px; color: var(--muted); cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.new-chat-btn:hover { border-color: var(--teal); color: var(--teal); }
+
+/* Session loading spinner */
+.session-loading { display: none; align-items: center; justify-content: center; gap: 10px; padding: 32px; font-size: 14px; color: var(--muted); }
+.session-loading.visible { display: flex; }
+.spin { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── MRI Upload Button ───────────────────────────────────────────────────── */
+.mri-upload-btn {
+  flex-shrink: 0;
+  padding: 0 14px;
+  height: 44px;
+  background: transparent;
+  border: 1.5px solid var(--teal);
+  border-radius: 10px;
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mri-upload-btn:hover,
+.mri-upload-btn.active {
+  background: var(--teal);
+  color: #fff;
+}
+
+/* ── Dual MRI Panel ──────────────────────────────────────────────────────── */
+.mri-panel {
+  background: var(--sand);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+  margin-bottom: 10px;
+  animation: fadeUp 0.2s ease;
+}
+.mri-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 12px;
+}
+.mri-panel-close {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.mri-panel-close:hover { background: var(--border); }
+
+.mri-slots {
+  display: flex;
+  gap: 10px;
+}
+.mri-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+  user-select: none;
+}
+.mri-slot:hover       { border-color: var(--teal); background: var(--teal-lt); }
+.mri-slot.ready       { border-color: var(--teal); border-style: solid; background: var(--teal-lt); }
+.mri-slot-icon        { font-size: 22px; }
+.mri-slot-label       { font-size: 12px; font-weight: 700; color: var(--navy); letter-spacing: 0.04em; }
+.mri-slot-name        { font-size: 11px; color: var(--muted); word-break: break-all; line-height: 1.4; max-width: 100%; }
+
+.mri-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  gap: 10px;
+}
+.mri-hint {
+  font-size: 11px;
+  color: var(--muted);
+  flex: 1;
+}
+.mri-analyze-btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  background: var(--navy);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.mri-analyze-btn:disabled         { opacity: 0.4; cursor: not-allowed; }
+.mri-analyze-btn:not(:disabled):hover { background: #162F52; }
+
+/* ── MRI wait bubble (shows during 10-20 min LST-AI analysis) ──────────────── */
+.mri-wait-bubble {
+  background: #f0f7ff;
+  border: 1px solid #c8dfff;
+  border-left: 4px solid var(--navy, #1D3B6E);
+  padding: 14px 16px;
+  line-height: 1.6;
+}
+.mri-timer {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-family: monospace;
+  color: #555;
+  background: #e8f0fe;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+
+/* ── Responsive: Mobile (≤ 640px) ────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Chat padding */
+  .chat-container { padding: 0 10px; }
+
+  /* Bubbles: wider on small screens */
+  .bubble {
+    max-width: 88%;
+    font-size: 13px;
+    padding: 11px 14px;
+  }
+
+  /* Welcome screen */
+  .welcome        { padding: 24px 12px; gap: 10px; }
+  .welcome h2     { font-size: 18px; }
+  .welcome p      { font-size: 13px; }
+  .welcome-icon   { width: 56px; height: 56px; font-size: 26px; }
+
+  /* Chips: horizontal scroll instead of wrapping */
+  .welcome-chips  {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .welcome-chips::-webkit-scrollbar { display: none; }
+  .chip { white-space: nowrap; flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
+
+  /* Input row: tighter on mobile */
+  .input-area     { padding: 10px 0 14px; }
+  .input-controls { margin-bottom: 6px; }
+  .msg-input      { min-height: 42px; font-size: 14px; padding: 10px 13px; }
+  .send-btn       { width: 42px; height: 42px; }
+  .mri-upload-btn { padding: 0 10px; height: 42px; font-size: 12px; }
+
+  /* MRI panel: slots stack vertically */
+  .mri-slots          { flex-direction: column; gap: 8px; }
+  .mri-slot           { padding: 10px; flex-direction: row; justify-content: flex-start; gap: 10px; text-align: left; }
+  .mri-slot-icon      { font-size: 18px; }
+  .mri-panel-footer   { flex-direction: column; align-items: stretch; gap: 8px; }
+  .mri-analyze-btn    { width: 100%; text-align: center; }
+
+  /* Session label: truncate on small screens */
+  .session-id { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
