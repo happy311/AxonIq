@@ -5,7 +5,7 @@ FROM python:3.11-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ git libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 TF_USE_LEGACY_KERAS=1 TF_CPP_MIN_LOG_LEVEL=2
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -62,6 +62,7 @@ ENV PORT=8000 \
     MRI_ATLAS_DATASET_DIR=/opt/mri_assets/atlases \
     MRI_WORK_DIR=/tmp/axoniq_mri \
     MRI_DEVICE=cpu \
+    TF_USE_LEGACY_KERAS=1 \
     MRI_MAX_CONCURRENT_JOBS=1 \
     MRI_CHECKPOINT_DIR=/app/checkpoints \
     HF_HUB_OFFLINE=0

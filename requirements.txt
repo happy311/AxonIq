@@ -39,3 +39,8 @@ negspacy==1.0.4
 segmentation-models-pytorch==0.3.4
 antspyx==0.4.2
 antspynet==0.2.9
+
+# antspynet needs TensorFlow. 2.16.x is the newest line compatible with protobuf<5 / numpy 1.26 / wrapt 2.x.
+# tf-keras + TF_USE_LEGACY_KERAS=1 keeps antspynet on Keras 2 (TF 2.16 otherwise ships Keras 3).
+tensorflow==2.16.2
+tf-keras==2.16.0

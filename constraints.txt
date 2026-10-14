@@ -1,5 +1,7 @@
 # Full transitive pin set from the 2026-10-09 resolution of requirements.txt (python 3.11, linux x86_64).
 # Use:  pip install -r requirements.txt -c constraints.txt
+# NOTE: protobuf is held at 4.25.8 (and opentelemetry-*/googleapis-common-protos at protobuf<5-compatible
+# versions) because tensorflow 2.16.x (needed by antspynet) requires protobuf<5.
 
 acres==0.5.0
 aiohappyeyeballs==2.7.1
@@ -40,7 +42,7 @@ flatbuffers==25.12.19
 formulaic==0.5.2
 frozenlist==1.8.0
 fsspec==2026.9.0
-googleapis-common-protos==1.75.5
+googleapis-common-protos==1.65.0
 grpcio==1.84.0
 h11==0.16.0
 hf-xet==1.7.0
@@ -91,13 +93,12 @@ numpy==1.26.4
 oauthlib==4.0.0
 ollama==0.6.3
 onnxruntime==1.31.0
-opentelemetry-api==1.45.1
-opentelemetry-exporter-otlp-common==0.66b1
-opentelemetry-exporter-otlp-proto-common==1.45.1
-opentelemetry-exporter-otlp-proto-grpc==1.45.1
-opentelemetry-proto==1.45.1
-opentelemetry-sdk==1.45.1
-opentelemetry-semantic-conventions==0.66b1
+opentelemetry-api==1.27.0
+opentelemetry-exporter-otlp-proto-common==1.27.0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
+opentelemetry-proto==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-semantic-conventions==0.48b0
 orjson==3.13.0
 ormsgpack==1.12.2
 overrides==7.7.0
@@ -108,7 +109,7 @@ pillow==12.3.0
 platformdirs==4.12.4
 preshed==3.0.13
 propcache==0.5.4
-protobuf==7.36.2
+protobuf==4.25.8
 pyasn1==0.6.4
 pybase64==1.5.1
 pybids==0.18.1
@@ -175,3 +176,5 @@ antspyx==0.4.2
 antspynet==0.2.9
 torch==2.3.1
 torchvision==0.18.1
+tensorflow==2.16.2
+tf-keras==2.16.0
