@@ -6,8 +6,9 @@
 const API = window.location.origin;
 
 // Auth
-let authToken   = localStorage.getItem('nc_token') || null;
-let currentUser = JSON.parse(localStorage.getItem('nc_user') || 'null');
+// The session token lives in an HttpOnly cookie (JS can never read it → XSS cannot steal it).
+// Only non-sensitive display info is kept here, in memory; it is re-fetched via /auth/me on load.
+let currentUser = null;
 
 // Session
 let sessionId   = null;

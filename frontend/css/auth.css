@@ -13,6 +13,8 @@
   padding: 40px 44px;
   width: 420px;
   max-width: 95vw;
+  max-height: 94vh;
+  overflow-y: auto;          /* register form (esp. doctor fields) can exceed short screens */
   box-shadow: 0 24px 64px rgba(0,0,0,0.3);
 }
 
@@ -42,3 +44,6 @@
 
 .auth-error { background: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #B91C1C; margin-bottom: 14px; display: none; }
 .auth-register-only { display: none; }
+
+.auth-doctor-only{display:none;}
+.auth-field select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font:inherit;background:#fff;}

@@ -32,8 +32,8 @@ async function submitChangePassword() {
     errEl.textContent = 'Please fill in all fields.';
     errEl.style.display = 'block'; return;
   }
-  if (newPw.length < 6) {
-    errEl.textContent = 'New password must be at least 6 characters.';
+  if (newPw.length < 10) {
+    errEl.textContent = 'New password must be at least 10 characters.';
     errEl.style.display = 'block'; return;
   }
   if (newPw !== confPw) {
@@ -48,7 +48,7 @@ async function submitChangePassword() {
       body:    JSON.stringify({ old_password: oldPw, new_password: newPw }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to change password.');
+    if (!res.ok) throw new Error(errorText(data, 'Failed to change password.'));
     okEl.textContent   = '✅ Password changed successfully!';
     okEl.style.display = 'block';
     setTimeout(hideChangePassword, 2000);
@@ -124,18 +124,13 @@ async function fpSendOTP() {
     });
     const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) { _fpErr(data.detail || 'Server error — please try again.'); return; }
-    if (data.dev_mode && data.dev_error) { _fpErr(data.dev_error); return; }
+    if (!res.ok) { _fpErr(errorText(data, 'Server error — please try again.')); return; }
 
     document.getElementById('fpEmailShow').textContent = email;
     _fpGoToStep(2);
 
-    if (data.dev_mode && data.dev_otp) {
-      document.getElementById('fpOTP').value = data.dev_otp;
-      _fpOk('Dev mode — code: ' + data.dev_otp);
-    } else {
-      _fpOk('Code sent! Check your inbox and spam folder.');
-    }
+    // Same wording whether or not the address has an account (no enumeration).
+    _fpOk('If an account exists for that address, a code is on its way. Check your inbox and spam folder.');
     document.getElementById('fpOTP').focus();
 
   } catch {
@@ -158,7 +153,7 @@ async function fpVerifyOTP() {
       body:    JSON.stringify({ email, otp }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Invalid or expired code.');
+    if (!res.ok) throw new Error(errorText(data, 'Invalid or expired code.'));
     _fpResetToken = data.reset_token;
     _fpGoToStep(3);
     document.getElementById('fpSuccess').style.display = 'none';
@@ -169,7 +164,7 @@ async function fpVerifyOTP() {
 async function fpSetPassword() {
   const newPw  = document.getElementById('fpNewPw').value;
   const confPw = document.getElementById('fpConfirmPw').value;
-  if (!newPw || newPw.length < 6) { _fpErr('Password must be at least 6 characters.'); return; }
+  if (!newPw || newPw.length < 10) { _fpErr('Password must be at least 10 characters.'); return; }
   if (newPw !== confPw) { _fpErr('Passwords do not match.'); return; }
 
   try {
@@ -179,8 +174,41 @@ async function fpSetPassword() {
       body:    JSON.stringify({ reset_token: _fpResetToken, new_password: newPw }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Reset failed — the link may have expired.');
+    if (!res.ok) throw new Error(errorText(data, 'Reset failed — the link may have expired.'));
     _fpOk('Password reset successfully! Redirecting to login…');
     setTimeout(() => { hideForgotPassword(); switchTab('login'); }, 2000);
   } catch (e) { _fpErr(e.message); }
+}
+
+
+// Entry point for the admin-issued reset link (token arrives in the URL fragment).
+function startResetWithToken(token) {
+  showForgotPassword();
+  _fpResetToken = token;
+  _fpGoToStep(3);
+  document.getElementById('fpSuccess').style.display = 'none';
+}
+
+// Data-subject controls
+async function exportMyData() {
+  const res = await authFetch('/user/me/export');
+  if (!res.ok) { alert('Could not export your data right now.'); return; }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'axoniq_my_data.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function deleteMyAccount() {
+  const pw = prompt('This permanently deletes your account and ALL conversations and MRI results.\nType your password to confirm:');
+  if (!pw) return;
+  const res = await authFetch('/user/me', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw }),
+  });
+  if (res.ok) { currentUser = null; sessionId = null; location.reload(); }
+  else { const d = await res.json().catch(() => ({})); alert(errorText(d, 'Could not delete the account.')); }
 }

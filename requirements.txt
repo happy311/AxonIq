@@ -1,62 +1,41 @@
-# AxonIQ — HuggingFace Spaces (agentic build)
+# AxonIQ — runtime dependencies. EVERY line is an exact pin (==).
+# Resolved 2026-10-09 for CPython 3.11 / linux x86_64 (see constraints.txt for the full transitive set).
+# For a hash-locked build run:  scripts/lock.sh   (pip-compile --generate-hashes) and commit the result
+# over this file — the Dockerfile then installs with automatic hash enforcement.
+# torch is pinned separately: requirements-torch-cpu.txt / requirements-torch-gpu.txt
+# (the CPU/CUDA builds only exist on the PyTorch index).
+
 fastapi==0.115.12
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
-starlette>=0.27.0
-
-# Pydantic
+starlette==0.46.2
 pydantic==2.11.5
-
-# Rate limiting + logging
 slowapi==0.1.9
 loguru==0.7.3
-
-# Deterministic symptom pattern DB (ported from NeuroCheck) — negation-aware
-# regex classifier used as a tier/feature floor in api/agent/graph/node_llm.py.
-# Uses a blank English pipeline (sentencizer only), no model download needed.
 spacy==3.8.13
+langchain-core==1.6.9
+langchain-community==0.4.2
+langchain-ollama==1.1.0
+langgraph==1.2.14
+huggingface_hub==1.33.0
+chromadb==1.5.9
+python-docx==1.2.0
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+email-validator==2.3.0
+cryptography==50.0.2
+reportlab==5.0.1
+httpx==0.28.1
+anthropic==1.12.1
+templateflow==25.1.2
+nilearn==0.14.1
+nibabel==5.4.2
+pydicom==3.0.2
+scipy==1.17.1
+numpy==1.26.4
+
+# Pinned previously by the project (sdist-only / not resolvable as wheels in the lock run):
 negspacy==1.0.4
-
-# LangChain + LangGraph (agentic)
-langchain-core>=0.3.0
-langchain-community>=0.3.0
-langchain-ollama>=0.2.0
-langgraph>=0.2.0
-
-# HuggingFace
-# v22 FIX: langchain-huggingface removed — its HuggingFaceEndpoint called
-# InferenceClient.post(), removed upstream in huggingface_hub >= 0.26. Now
-# calling InferenceClient.chat_completion() directly (see api/agent/llm.py).
-huggingface-hub>=0.28.0
-
-# RAG
-chromadb
-
-# Document parsing
-python-docx
-
-# Auth
-python-jose[cryptography]
-bcrypt
-email-validator
-
-# Report
-reportlab
-httpx>=0.27.0
-
-# Anthropic Claude (primary LLM — falls back to HuggingFace if key absent)
-anthropic>=0.30.0
-
-# ── MRI segmentation engine (v21 — merged in-process, CPU-only) ──────────────
-# Ported from the Kaggle notebook. These are heavy — first `pip install` and
-# first-run downloads (MNI template, atlases) can take a while. See
-# README_DEPLOY_AWS.md for instance-size guidance.
-torch==2.3.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
 segmentation-models-pytorch==0.3.4
 antspyx==0.4.2
 antspynet==0.2.9
-templateflow>=24.2.0
-nilearn>=0.10.4
-nibabel>=5.2.0
-scipy>=1.13.0
-numpy<2.0

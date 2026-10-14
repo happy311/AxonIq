@@ -23,3 +23,9 @@ __pycache__/
 # OS / editor
 .DS_Store
 .vscode/
+.env.*
+!.env.example
+backups/
+*.enc
+checkpoints/SHA256SUMS.local
+.pytest_cache/

@@ -19,44 +19,96 @@ Option B — Gmail (requires App Password):
 Option C — Any SMTP provider:
   Set SMTP_HOST, SMTP_PORT, SMTP_EMAIL, SMTP_PASSWORD accordingly
 
-If SMTP not configured: OTP is returned in API response (dev mode).
+If SMTP is not configured the OTP is NEVER returned to the client; delivery simply fails (logged).
 """
 from __future__ import annotations
-import os
-import smtplib
-import random
-import string
 import hashlib
+import hmac
+import html
+import os
+import re
+import secrets
+import smtplib
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from loguru import logger
 
+from api.core.config import JWT_SECRET, OTP_EXPIRY_MINUTES
+
 SMTP_EMAIL    = os.environ.get("SMTP_EMAIL", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_HOST     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
-OTP_EXPIRY_MINUTES = 15
+
+_EMAIL_RE = re.compile(r"^[^@\s'\"<>]+@[^@\s'\"<>]+\.[^@\s'\"<>]+$")
 
 
 def generate_otp(length: int = 6) -> str:
-    """Generate a 6-digit numeric OTP."""
-    return "".join(random.choices(string.digits, k=length))
+    """Cryptographically secure numeric OTP (secrets, never `random`)."""
+    return "".join(str(secrets.randbelow(10)) for _ in range(length))
 
 
-def hash_otp(otp: str) -> str:
-    """Hash the OTP before storing (SHA-256)."""
-    return hashlib.sha256(otp.encode()).hexdigest()
+def new_salt() -> str:
+    return secrets.token_hex(16)
 
 
-def verify_otp(plain_otp: str, stored_hash: str) -> bool:
-    """Check if plain OTP matches stored hash."""
-    return hash_otp(plain_otp) == stored_hash
+def hash_otp(otp: str, salt: str, email: str) -> str:
+    """HMAC-SHA256 keyed with JWT_SECRET over salt|email|otp. A DB leak alone cannot be
+    brute-forced offline (the 10^6 space is useless without the server key)."""
+    msg = f"{salt}|{email.lower()}|{otp}".encode()
+    return hmac.new(JWT_SECRET.encode(), msg, hashlib.sha256).hexdigest()
+
+
+def verify_otp(plain_otp: str, salt: str, email: str, stored_mac: str) -> bool:
+    """Constant-time comparison."""
+    return hmac.compare_digest(hash_otp(plain_otp, salt, email), stored_mac)
 
 
 def otp_expiry() -> str:
-    """Return UTC expiry timestamp (15 minutes from now)."""
     return (datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat()
+
+
+def _smtp_send(msg: MIMEMultipart, to_email: str) -> bool:
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        logger.warning("[Email] SMTP not configured; cannot send.")
+        return False
+    if not _EMAIL_RE.match(to_email) or "\n" in to_email or "\r" in to_email:
+        logger.error("[Email] refusing to send to malformed address")
+        return False
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        logger.info("[Email] message sent")
+        return True
+    except smtplib.SMTPException as e:
+        logger.error("[Email] SMTP error: {}", type(e).__name__)
+    except Exception as e:
+        logger.error("[Email] unexpected error: {}", type(e).__name__)
+    return False
+
+
+def send_admin_reset_email(to_email: str, username: str, link: str, minutes: int) -> bool:
+    """Admin-initiated reset: the user receives a single-use link (token in the URL fragment)."""
+    body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+      <h2>Password reset required</h2>
+      <p>Hello <strong>{html.escape(username)}</strong>, an administrator has reset your
+      NeuroCheck account. Use the one-time link below to choose a new password
+      (valid for {minutes} minutes):</p>
+      <p><a href="{html.escape(link, quote=True)}">Set a new password</a></p>
+      <p style="color:#666;font-size:12px;">If you did not expect this, contact support.</p>
+    </div>"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "NeuroCheck — set a new password"
+    msg["From"] = f"NeuroCheck AI <{SMTP_EMAIL}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(body, "html"))
+    return _smtp_send(msg, to_email)
 
 
 def send_otp_email(to_email: str, username: str, otp: str) -> bool:
@@ -64,10 +116,6 @@ def send_otp_email(to_email: str, username: str, otp: str) -> bool:
     Send OTP email via Gmail SMTP.
     Returns True on success, False on failure.
     """
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
-        logger.warning("[Email] SMTP_EMAIL or SMTP_PASSWORD not set. Cannot send email.")
-        return False
-
     subject = "NeuroCheck — Password Reset Code"
     html_body = f"""
     <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;">
@@ -81,7 +129,7 @@ def send_otp_email(to_email: str, username: str, otp: str) -> bool:
 
       <h2 style="color:#0B1F3A;font-size:18px;margin-bottom:8px;">Password Reset Request</h2>
       <p style="color:#6B6056;font-size:14px;line-height:1.7;">
-        Hello <strong>{username}</strong>, we received a request to reset your NeuroCheck password.
+        Hello <strong>{html.escape(username)}</strong>, we received a request to reset your NeuroCheck password.
         Use the code below to proceed:
       </p>
 
@@ -112,28 +160,4 @@ def send_otp_email(to_email: str, username: str, otp: str) -> bool:
     msg["From"]    = f"NeuroCheck AI <{SMTP_EMAIL}>"
     msg["To"]      = to_email
     msg.attach(MIMEText(html_body, "html"))
-
-    try:
-        logger.info("[Email] Connecting to {}:{}", SMTP_HOST, SMTP_PORT)
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.set_debuglevel(0)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            logger.info("[Email] Logging in as {}", SMTP_EMAIL)
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-        logger.info("[Email] OTP sent successfully to {}", to_email)
-        return True
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error("[Email] AUTH FAILED — wrong email/password or App Password not set. Error: {}", e)
-        return False
-    except smtplib.SMTPConnectError as e:
-        logger.error("[Email] CONNECTION FAILED to {}:{} — {}", SMTP_HOST, SMTP_PORT, e)
-        return False
-    except smtplib.SMTPException as e:
-        logger.error("[Email] SMTP error: {}", e)
-        return False
-    except Exception as e:
-        logger.error("[Email] Unexpected error sending to {}: {}", to_email, e)
-        return False
+    return _smtp_send(msg, to_email)

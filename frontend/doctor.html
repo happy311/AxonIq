@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AxonIQ — Doctor Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/admin.css?v=sec-1">
+<link rel="stylesheet" href="/css/doctor.css?v=roles-1">
+</head>
+<body>
+
+<div id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-mark">🩺</div>
+      <div><h2>AxonIQ Doctor Portal</h2><p>Approved clinicians only</p></div>
+    </div>
+    <div id="authError" class="auth-error"></div>
+    <div class="auth-field">
+      <label>Username or e-mail</label>
+      <input type="text" id="docUser" autocomplete="username">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="docPass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="auth-btn" data-action="docLogin">Sign In</button>
+    <p class="hint">No account yet? Register as a doctor on the main sign-up page; an administrator must approve you before you can sign in.</p>
+  </div>
+</div>
+
+<div id="adminShell">
+  <header>
+    <div class="logo-mark">🩺</div>
+    <div class="header-text"><h1>AxonIQ Doctor Portal</h1><p id="docWho">Patient search</p></div>
+    <div class="header-right"><button class="sign-out-btn" data-action="docSignOut">Sign Out</button></div>
+  </header>
+  <div class="page">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Find patient by e-mail</div>
+        <div class="search-row">
+          <input type="text" class="search-input" id="patientQuery" placeholder="e.g. jane@example.com" autocomplete="off">
+          <button class="export-btn primary" data-action="docSearch">Search</button>
+        </div>
+        <p class="hint">Enter at least 3 characters. Every search, view and download is logged.</p>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">My assigned patients <span class="user-badge" id="assignedCount">0</span></div>
+        <p class="hint">Patients who submitted an MRI are assigned automatically to the doctor with the fewest patients.</p>
+      </div>
+      <div class="user-list" id="assignedList"></div>
+      <div class="sidebar-section"><div class="sidebar-section-title">Search results</div></div>
+      <div class="user-list" id="patientList"></div>
+    </div>
+    <div class="main" id="mainPanel">
+      <div class="empty-state"><div class="icon">🔎</div><p>Search for a patient by e-mail to see their symptoms and MRI scans</p></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/utils.js?v=sec-1"></script>
+<script src="/js/doctor.js?v=roles-1"></script>
+</body>
+</html>

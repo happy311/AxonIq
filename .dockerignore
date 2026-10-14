@@ -1,0 +1,35 @@
+# secrets / local state — must never enter an image layer
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+.git
+.gitignore
+.github
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+tests
+# data
+*.db
+*.db-journal
+*.sqlite*
+data/
+backups/
+chroma*/
+*.nii
+*.nii.gz
+# model weights are mounted at runtime (hash-pinned), not baked into the image
+checkpoints/*.pt
+checkpoints/*.pth
+# docs / dev
+*.md
+!README_DEPLOY_AWS.md
+docker-compose*.yml
+Dockerfile*

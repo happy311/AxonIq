@@ -60,9 +60,23 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ── Auto-login if valid token + user exist in localStorage ──────────────────
-  if (authToken && currentUser) {
-    showApp();
+  // ── Restore session from the HttpOnly cookie ────────────────────────────────
+  (async () => {
+    try {
+      const res = await authFetch('/auth/me');
+      if (res.ok) {
+        const me = await res.json();
+        if (me.role === 'doctor') { window.location.href = '/doctor'; return; }
+        currentUser = { id: me.user_id, username: me.username };
+        showApp();
+      }
+    } catch { /* offline → auth overlay stays visible */ }
+  })();
+
+  // ── Admin-issued one-time reset link:  /chat-ui#reset=<token> ────────────────
+  const m = location.hash.match(/^#reset=([A-Za-z0-9_\-.]+)$/);
+  if (m) {
+    history.replaceState(null, '', location.pathname + location.search);   // token out of the URL bar
+    startResetWithToken(m[1]);
   }
-  // Otherwise the auth overlay is already visible (default state in HTML)
 });

@@ -15,4 +15,9 @@ Why this matters:
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+# KEY = request.client.host. Behind a reverse proxy this is the REAL client IP only because
+# uvicorn runs with `--proxy-headers --forwarded-allow-ips=<trusted proxy IP/CIDR>`, which
+# rewrites request.client from X-Forwarded-For *only* for connections from those proxies.
+# We never parse X-Forwarded-For ourselves — a spoofed header from an untrusted peer is ignored,
+# so an attacker cannot dodge the limiter (or frame another IP) by sending their own header.
 limiter = Limiter(key_func=get_remote_address)

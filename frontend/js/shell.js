@@ -68,7 +68,8 @@ function renderSessionList(sessions) {
         <div class="session-title">${escapeHtml(s.title || 'Chat')}${mriBadge}</div>
         <div class="session-meta">${ts}</div>
       </div>
-      <button class="session-delete" onclick="deleteSession(event,'${s.session_uuid}')">✕</button>`;
+      <button class="session-delete" type="button">✕</button>`;
+    item.querySelector('.session-delete').addEventListener('click', ev => deleteSession(ev, s.session_uuid));
     item.addEventListener('click', () => loadSession(s.session_uuid));
     list.appendChild(item);
   });

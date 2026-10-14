@@ -1,0 +1,3 @@
+# GPU install = CUDA torch pin + the shared locked set (see Dockerfile.gpu).
+-r requirements-torch-gpu.txt
+-r requirements.txt

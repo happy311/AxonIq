@@ -4,7 +4,8 @@
  */
 
 function escapeHtml(t) {
-  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function formatTimestamp(iso) {
@@ -36,9 +37,25 @@ function formatMessage(text) {
   return `<p>${html}</p>`;
 }
 
+function getCookie(name) {
+  const m = document.cookie.split('; ').find(c => c.startsWith(name + '='));
+  return m ? decodeURIComponent(m.split('=')[1]) : '';
+}
+
+// Cookie-authenticated fetch: same-origin credentials + CSRF double-submit header on
+// state-changing requests. Never put tokens in JS-visible storage.
 function authFetch(path, opts = {}) {
-  return fetch(`${API}${path}`, {
-    ...opts,
-    headers: { ...(opts.headers || {}), 'Authorization': `Bearer ${authToken}` },
-  });
+  const method  = (opts.method || 'GET').toUpperCase();
+  const headers = { ...(opts.headers || {}) };
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) headers['X-CSRF-Token'] = getCookie('nc_csrf');
+  return fetch(`${API}${path}`, { ...opts, headers, credentials: 'same-origin' });
+}
+
+// FastAPI error payloads → one readable string (detail may be a string or a 422 list)
+function errorText(data, fallback) {
+  const d = data && data.detail;
+  if (!d) return fallback;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map(e => e.msg || 'Invalid value').join(', ');
+  return fallback;
 }

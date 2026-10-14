@@ -45,7 +45,7 @@ async function sendMessage() {
 
   const text = input.value.trim();
   // Bail out if MRI analysis is in progress — chat is locked until result arrives.
-  if (!text || isWaiting || _mriLockActive || !authToken) return;
+  if (!text || isWaiting || _mriLockActive || !currentUser) return;
 
   isWaiting          = true;
   input.value        = '';
@@ -63,12 +63,9 @@ async function sendMessage() {
   const abortTimerId = setTimeout(() => controller.abort(), 30 * 60 * 1000);
 
   try {
-    const res = await fetch(`${API}/chat`, {
+    const res = await authFetch('/chat', {
       method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${authToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body:   JSON.stringify({ message: text, session_id: sessionId }),
       signal: controller.signal,
     });
@@ -77,13 +74,19 @@ async function sendMessage() {
     if (typing && typing.isConnected) typing.remove();
 
     if (res.status === 401) { signOut(); return; }
+    if (res.status === 404 && sessionId) {      // conversation was deleted/purged elsewhere
+      sessionId = null;
+      addBubble('ai', '⚠️ That conversation no longer exists. Your next message will start a new one.', new Date().toISOString());
+      return;
+    }
     if (res.status === 429) {
-      addBubble('ai', '⚠️ You are sending messages too quickly. Please wait a moment.', new Date().toISOString());
+      const e429 = await res.json().catch(() => ({}));
+      addBubble('ai', '⚠️ ' + errorText(e429, 'You are sending messages too quickly. Please wait a moment.'), new Date().toISOString());
       return;
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Server error (${res.status})`);
+      throw new Error(errorText(err, `Server error (${res.status})`));
     }
 
     const data = await res.json();
@@ -233,9 +236,7 @@ function _pollMriStatus() {
 
     let res;
     try {
-      res = await fetch(`${API}/mri/status/${encodeURIComponent(sessionId)}`, {
-        headers: { 'Authorization': `Bearer ${authToken}` },
-      });
+      res = await authFetch(`/mri/status/${encodeURIComponent(sessionId)}`);
     } catch (err) {
       // Network hiccup — a quick status ping is safe to just retry, no need
       // to give up the whole analysis over one dropped request.
@@ -287,9 +288,7 @@ function _pollMriStatus() {
 
 async function _fetchMriResult() {
   try {
-    const res = await fetch(`${API}/mri/result/${encodeURIComponent(sessionId)}`, {
-      headers: { 'Authorization': `Bearer ${authToken}` },
-    });
+    const res = await authFetch(`/mri/result/${encodeURIComponent(sessionId)}`);
 
     if (res.status === 401) { unlockChatAfterMri(); signOut(); return; }
     if (!res.ok) {
@@ -339,9 +338,10 @@ function handleMriSlot(input, slot) {
   if (!file) return;
   input.value = '';   // allow re-selecting same file
 
-  if (!file.name.endsWith('.nii.gz') && !file.name.endsWith('.nii')) {
+  const lname = file.name.toLowerCase();
+  if (!lname.endsWith('.nii.gz') && !lname.endsWith('.nii') && !lname.endsWith('.zip')) {
     addBubble('ai',
-      `⚠️ Only NIfTI files (.nii.gz or .nii) are accepted for ${slot.toUpperCase()}.`,
+      `⚠️ Accepted files for ${slot.toUpperCase()}: NIfTI (.nii, .nii.gz) or a .zip of DICOM slices.`,
       new Date().toISOString()
     );
     return;
@@ -402,30 +402,26 @@ async function submitMriPair() {
     const form = new FormData();
     form.append('flair', _mriFiles.flair);
 
-    const res = await fetch(
-      `${API}/mri/upload?session_id=${encodeURIComponent(sessionId)}`,
-      {
-        method:  'POST',
-        headers: { 'Authorization': `Bearer ${authToken}` },
-        body:    form,
-      }
+    const res = await authFetch(
+      `/mri/upload?session_id=${encodeURIComponent(sessionId)}`,
+      { method: 'POST', body: form }
     );
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Upload failed (${res.status})`);
+      throw new Error(errorText(err, `Upload failed (${res.status})`));
     }
 
     const data = await res.json();
 
     progressBubble.querySelector('.bubble').innerHTML =
-      `✅ MRI file uploaded (FLAIR ${data.flair_mb} MB).<br>` +
+      `✅ MRI file uploaded (FLAIR ${data.flair_mb} MB${data.converted_from_dicom_slices ? ', converted from ' + Number(data.converted_from_dicom_slices) + ' DICOM slices' : ''}).<br>` +
       `🔬 MRI is being analysed — this may take <strong>10–20 minutes</strong>.<br>` +
       `<em>Chat is locked — it will resume automatically when the result arrives.</em>`;
 
     // Reset slot state so the same file can be re-uploaded if needed
     _mriFiles.flair = null;
-    document.getElementById('flairName').textContent = 'Click to select .nii / .nii.gz';
+    document.getElementById('flairName').textContent = 'Click to select .nii / .nii.gz / DICOM .zip';
     document.getElementById('flairSlot')?.classList.remove('ready');
     _updateMriAnalyzeBtn();
 

@@ -155,12 +155,12 @@ if not ENV.exists():
         _sh.copy(example, ENV)
     else:
         ENV.write_text(
-            "SPACY_MODEL=en_model\nNEUROCHECK_DB=neurocheck.db\n"
-            "JWT_SECRET=CHANGE_THIS\nJWT_EXPIRE_MINUTES=10080\n"
-            "HOST=0.0.0.0\nPORT=8000\nWORKERS=1\n",
+            "NEUROCHECK_DB=neurocheck.db\n"
+            f"JWT_SECRET={__import__('secrets').token_urlsafe(48)}\nJWT_EXPIRE_MINUTES=480\n"
+            "ENV=dev\nHOST=127.0.0.1\nPORT=8000\nWORKERS=1\n",
             encoding="utf-8",
         )
-    warn(f"Edit {ENV} and set a real JWT_SECRET!")
+    warn(f"Created {ENV} with a random JWT_SECRET. Keep it secret; it is never committed (.gitignore).")
 else:
     env_text = ENV.read_text(encoding="utf-8")
     if "CHANGE_THIS" in env_text:

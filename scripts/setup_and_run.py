@@ -54,7 +54,6 @@ print("  → Open http://localhost:8000 in your browser")
 print("  → API docs: http://localhost:8000/docs")
 print("  → Press Ctrl+C to stop\n")
 
-os.environ["SPACY_MODEL"] = str(MODEL_PATH)
 run([
     sys.executable, "-m", "uvicorn", "api.main:app",
     "--host", "0.0.0.0",

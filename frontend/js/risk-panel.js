@@ -120,7 +120,7 @@ function _updateMriSection(data) {
           id="mriTextInput"
           placeholder="e.g. MRI brain shows multiple T2/FLAIR hyperintensities in periventricular and juxtacortical regions…"
         ></textarea>
-        <button class="mri-submit-btn" onclick="submitMriText()">Analyse MRI Report</button>
+        <button class="mri-submit-btn" data-action="submitMriText">Analyse MRI Report</button>
       </div>`;
     mriBox.style.display = 'block';
     return;

@@ -7,13 +7,17 @@ Tables: users, chat_sessions, messages, password_reset_otps, user_logs
 """
 from __future__ import annotations
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
-from api.core.config import DB_PATH, BACKUP_DIR
+from loguru import logger
+
+from api.core.config import DB_PATH, BACKUP_DIR, IS_DEV
+from api.core.crypto import encrypt_text, decrypt_text
 
 
 def _now() -> str:
@@ -23,9 +27,12 @@ def _now() -> str:
 def _ensure_dirs() -> None:
     """Make sure the DB parent directory exists. Handles /data not mounted."""
     try:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     except PermissionError:
-        # /data not mounted — fall back to /tmp silently
+        if not IS_DEV:
+            # Never silently put patient data on an ephemeral/world-readable path.
+            raise RuntimeError(f"Cannot create database directory {DB_PATH.parent} — is the data volume mounted and writable?")
+        # dev only: fall back to /tmp
         from api.core import config as _cfg
         import os
         fallback = Path("/tmp/neurocheck.db")
@@ -115,23 +122,46 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_logs_user ON user_logs(user_id);
         CREATE INDEX IF NOT EXISTS idx_logs_time ON user_logs(created_at);
         """)
+    migrate_security_v1()
+    migrate_roles_v1()
+    try:
+        os.chmod(DB_PATH, 0o600)
+    except OSError:
+        pass
     _backup_db()
 
 
 def _backup_db() -> None:
-    import shutil, glob
+    """Consistent online backup (sqlite backup API) → BACKUP_DIR (separate from the
+    data volume), mode 0600, Fernet-encrypted when DATA_ENCRYPTION_KEY is set.
+    Keeps the 7 most recent. Failures are logged, never swallowed silently."""
+    import glob, tempfile
+    from api.core.crypto import encrypt_bytes, enabled
     try:
-        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         if not DB_PATH.exists():
             return
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
         ts   = datetime.now(timezone.utc).strftime("%Y%m%d")
-        dest = BACKUP_DIR / f"neurocheck_{ts}.db"
-        if not dest.exists():
-            shutil.copy2(str(DB_PATH), str(dest))
-        for old in sorted(glob.glob(str(BACKUP_DIR / "neurocheck_*.db")))[:-7]:
+        dest = BACKUP_DIR / (f"neurocheck_{ts}.db.enc" if enabled() else f"neurocheck_{ts}.db")
+        if dest.exists():
+            return
+        fd, tmp = tempfile.mkstemp(dir=str(BACKUP_DIR), suffix=".tmp")
+        os.close(fd)
+        try:
+            src = sqlite3.connect(str(DB_PATH))
+            dst = sqlite3.connect(tmp)
+            with dst:
+                src.backup(dst)
+            src.close(); dst.close()
+            data = Path(tmp).read_bytes()
+            dest.write_bytes(encrypt_bytes(data))
+            os.chmod(dest, 0o600)
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+        for old in sorted(glob.glob(str(BACKUP_DIR / "neurocheck_*")))[:-7]:
             Path(old).unlink(missing_ok=True)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("[Backup] failed: {}", type(e).__name__)
 
 
 # ── Safe migrations (idempotent) ──────────────────────────────────────────────
@@ -189,11 +219,21 @@ def migrate_add_otp_table() -> None:
 
 # ── User CRUD ─────────────────────────────────────────────────────────────────
 
-def create_user(username: str, email: str, password_hash: str) -> int:
+def create_user(username: str, email: str, password_hash: str, consent_version: Optional[str] = None,
+                role: str = "patient", doctor_license: Optional[str] = None,
+                doctor_institution: Optional[str] = None) -> int:
+    """role='patient' (default) or 'doctor'. Doctors start with doctor_status='pending' and cannot
+    sign in until an administrator approves them. The 'admin' role is never created here."""
+    if role not in ("patient", "doctor"):
+        raise ValueError("invalid role")
+    now = _now()
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO users (username, email, password_hash, created_at) VALUES (?,?,?,?)",
-            (username.strip(), email.strip().lower(), password_hash, _now()),
+            "INSERT INTO users (username, email, password_hash, created_at, consent_at, consent_version, "
+            "role, doctor_status, doctor_license, doctor_institution) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (username.strip(), email.strip().lower(), password_hash, now,
+             now if consent_version else None, consent_version,
+             role, "pending" if role == "doctor" else None, doctor_license, doctor_institution),
         )
         return cur.lastrowid
 
@@ -223,13 +263,38 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
 def set_admin(username: str, is_admin: bool = True) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE users SET is_admin=? WHERE username=? COLLATE NOCASE",
-            (1 if is_admin else 0, username),
+            "UPDATE users SET is_admin=?, role=CASE WHEN ?=1 THEN 'admin' "
+            "WHEN role='admin' THEN 'patient' ELSE role END WHERE username=? COLLATE NOCASE",
+            (1 if is_admin else 0, 1 if is_admin else 0, username),
         )
         return cur.rowcount > 0
 
 
-def update_user_password(user_id: int, new_hash: str) -> None:
+def update_user_password(user_id: int, new_hash: str) -> int:
+    """Set a new password; bumps token_version (invalidating every issued token),
+    stamps password_changed_at and clears must_change_password. Returns new version."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash=?, token_version=token_version+1, "
+            "password_changed_at=?, must_change_password=0 WHERE id=?",
+            (new_hash, _now(), user_id),
+        )
+        row = conn.execute("SELECT token_version FROM users WHERE id=?", (user_id,)).fetchone()
+        return int(row["token_version"]) if row else 0
+
+
+def admin_force_password_reset(user_id: int, unusable_hash: str) -> None:
+    """Invalidate the current password + all sessions; user must use a reset link."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash=?, token_version=token_version+1, "
+            "password_changed_at=?, must_change_password=1 WHERE id=?",
+            (unusable_hash, _now(), user_id),
+        )
+
+
+def set_password_hash_only(user_id: int, new_hash: str) -> None:
+    """Transparent hash upgrade at login (does NOT bump token_version)."""
     with get_conn() as conn:
         conn.execute("UPDATE users SET password_hash=? WHERE id=?", (new_hash, user_id))
 
@@ -253,14 +318,17 @@ def get_user_sessions(user_id: int) -> List[Dict[str, Any]]:
             "ORDER BY updated_at DESC",
             (user_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows]
+        for r in out:
+            r["title"] = decrypt_text(r["title"])
+        return out
 
 
 def update_session_title(session_uuid: str, title: str) -> None:
     with get_conn() as conn:
         conn.execute(
             "UPDATE chat_sessions SET title=?, updated_at=? WHERE session_uuid=?",
-            (title[:80], _now(), session_uuid),
+            (encrypt_text(title[:80]), _now(), session_uuid),
         )
 
 
@@ -272,13 +340,112 @@ def touch_session(session_uuid: str) -> None:
         )
 
 
-def delete_db_session(session_uuid: str) -> None:
-    """Soft-delete — never removes data."""
+def delete_db_session(session_uuid: str) -> list:
+    """HARD delete a session and everything hanging off it (messages, MRI results,
+    job rows, queued upload rows). Returns queued file paths the caller must unlink."""
     with get_conn() as conn:
-        conn.execute(
-            "UPDATE chat_sessions SET deleted_at=? WHERE session_uuid=?",
-            (_now(), session_uuid),
-        )
+        return _hard_delete_sessions(conn, [session_uuid])
+
+
+def _hard_delete_sessions(conn, uuids: list) -> list:
+    files: list = []
+    for u in uuids:
+        for r in conn.execute("SELECT file_path FROM nifti_queue WHERE session_uuid=?", (u,)).fetchall() \
+                if _table_exists(conn, "nifti_queue") else []:
+            try:
+                parsed = json.loads(r["file_path"])
+                files += [v for v in (parsed.get("flair"), parsed.get("t1")) if v] if isinstance(parsed, dict) else [r["file_path"]]
+            except Exception:
+                files.append(r["file_path"])
+        if _table_exists(conn, "nifti_queue"):
+            conn.execute("DELETE FROM nifti_queue WHERE session_uuid=?", (u,))
+        if _table_exists(conn, "mri_scans"):
+            files += [r["file_path"] for r in conn.execute(
+                "SELECT file_path FROM mri_scans WHERE session_uuid=?", (u,)).fetchall()]
+            conn.execute("DELETE FROM mri_scans WHERE session_uuid=?", (u,))
+        if _table_exists(conn, "mri_results"):
+            conn.execute("DELETE FROM mri_results WHERE session_uuid=?", (u,))
+        if _table_exists(conn, "mri_jobs"):
+            conn.execute("DELETE FROM mri_jobs WHERE session_uuid=?", (u,))
+        conn.execute("DELETE FROM user_logs WHERE session_uuid=?", (u,))
+        conn.execute("DELETE FROM messages WHERE session_uuid=?", (u,))
+        conn.execute("DELETE FROM chat_sessions WHERE session_uuid=?", (u,))
+    return files
+
+
+def _table_exists(conn, name: str) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
+
+
+def delete_user_everything(user_id: int) -> list:
+    """Right-to-erasure: hard-delete the user and ALL their data. Returns files to unlink."""
+    with get_conn() as conn:
+        uuids = [r["session_uuid"] for r in conn.execute(
+            "SELECT session_uuid FROM chat_sessions WHERE user_id=?", (user_id,)).fetchall()]
+        files = _hard_delete_sessions(conn, uuids)
+        if _table_exists(conn, "mri_scans"):          # any scan not tied to a listed session
+            files += [r["file_path"] for r in conn.execute(
+                "SELECT file_path FROM mri_scans WHERE user_id=?", (user_id,)).fetchall()]
+            conn.execute("DELETE FROM mri_scans WHERE user_id=?", (user_id,))
+        if _table_exists(conn, "assignments"):
+            conn.execute("DELETE FROM assignments WHERE patient_id=? OR doctor_id=?", (user_id, user_id))
+        for tbl in ("mri_results", "usage_counters", "password_reset_otps", "user_logs"):
+            if _table_exists(conn, tbl):
+                conn.execute(f"DELETE FROM {tbl} WHERE user_id=?", (user_id,))
+        if _table_exists(conn, "mri_jobs"):
+            conn.execute("DELETE FROM mri_jobs WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        return files
+
+
+def purge_old_data(retention_days: int, soft_deleted_days: int = 0) -> tuple:
+    """Retention policy. Returns (sessions_purged, files_to_unlink).
+    - sessions untouched for > retention_days (0 = disabled)
+    - legacy soft-deleted sessions older than soft_deleted_days (always purged)"""
+    from datetime import timedelta
+    files: list = []
+    n = 0
+    with get_conn() as conn:
+        uuids: list = []
+        if retention_days > 0:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+            uuids += [r["session_uuid"] for r in conn.execute(
+                "SELECT session_uuid FROM chat_sessions WHERE updated_at < ?", (cutoff,)).fetchall()]
+        cutoff2 = (datetime.now(timezone.utc) - timedelta(days=soft_deleted_days)).isoformat()
+        uuids += [r["session_uuid"] for r in conn.execute(
+            "SELECT session_uuid FROM chat_sessions WHERE deleted_at IS NOT NULL AND deleted_at < ?", (cutoff2,)).fetchall()]
+        uuids = list(dict.fromkeys(uuids))
+        if uuids:
+            files = _hard_delete_sessions(conn, uuids)
+            n = len(uuids)
+    return n, files
+
+
+def export_user_data(user_id: int) -> dict:
+    """GDPR-style export of everything we hold about the user (no secrets)."""
+    with get_conn() as conn:
+        u = conn.execute("SELECT id, username, email, created_at FROM users WHERE id=?", (user_id,)).fetchone()
+        if not u:
+            return {}
+        sessions = []
+        for sr in conn.execute("SELECT * FROM chat_sessions WHERE user_id=? ORDER BY created_at", (user_id,)).fetchall():
+            sd = dict(sr)
+            sd["title"] = decrypt_text(sd["title"])
+            sd["messages"] = [
+                {"role": m["role"], "content": decrypt_text(m["content"]), "created_at": m["created_at"]}
+                for m in conn.execute("SELECT role, content, created_at FROM messages WHERE session_uuid=? ORDER BY id",
+                                      (sd["session_uuid"],)).fetchall()]
+            sessions.append(sd)
+        mri = []
+        if _table_exists(conn, "mri_results"):
+            for r in conn.execute("SELECT * FROM mri_results WHERE user_id=? ORDER BY id", (user_id,)).fetchall():
+                d = dict(r)
+                d["findings_json"] = json.loads(decrypt_text(d["findings_json"]) or "{}")
+                mri.append(d)
+        logs = [dict(r) for r in conn.execute(
+            "SELECT action, detail, ip_address, session_uuid, created_at FROM user_logs WHERE user_id=? ORDER BY id",
+            (user_id,)).fetchall()]
+    return {"exported_at": _now(), "user": dict(u), "sessions": sessions, "mri_results": mri, "activity_log": logs}
 
 
 def get_session_owner(session_uuid: str) -> Optional[int]:
@@ -302,7 +469,7 @@ def save_message(session_uuid: str, role: str, content: str) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO messages (session_uuid, role, content, created_at) VALUES (?,?,?,?)",
-            (session_uuid, role, content, now),
+            (session_uuid, role, encrypt_text(content), now),
         )
         conn.execute(
             "UPDATE chat_sessions SET updated_at=? WHERE session_uuid=?",
@@ -318,7 +485,7 @@ def get_messages(session_uuid: str) -> List[Dict[str, Any]]:
             "WHERE session_uuid=? ORDER BY id ASC",
             (session_uuid,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "content": decrypt_text(r["content"])} for r in rows]
 
 
 def get_message_count(session_uuid: str) -> int:
@@ -484,16 +651,59 @@ def migrate_add_mri_jobs() -> None:
         """)
 
 
-def create_mri_job(session_uuid: str) -> None:
-    """Create/reset the job row for a session — call right before launching
-    the background task. Always starts in 'processing' status."""
+def create_mri_job(session_uuid: str, user_id: Optional[int] = None) -> None:
+    """Create/reset the job row for a session (always starts 'processing')."""
     now = _now()
     with get_conn() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO mri_jobs (session_uuid, status, error, created_at, updated_at) "
-            "VALUES (?, 'processing', NULL, ?, ?)",
-            (session_uuid, now, now),
+            "INSERT OR REPLACE INTO mri_jobs (session_uuid, status, error, created_at, updated_at, user_id) "
+            "VALUES (?, 'processing', NULL, ?, ?, ?)",
+            (session_uuid, now, now, user_id),
         )
+
+
+def try_start_mri_job(session_uuid: str, user_id: int, max_queue: int) -> str:
+    """Atomically enforce: 1 active job per user + bounded global queue.
+    Returns 'ok' | 'user_busy' | 'queue_full'."""
+    now = _now()
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM mri_jobs WHERE user_id=? AND status='processing'", (user_id,)).fetchone():
+            return "user_busy"
+        n = conn.execute("SELECT COUNT(*) FROM mri_jobs WHERE status='processing'").fetchone()[0]
+        if n >= max_queue:
+            return "queue_full"
+        conn.execute(
+            "INSERT OR REPLACE INTO mri_jobs (session_uuid, status, error, created_at, updated_at, user_id) "
+            "VALUES (?, 'processing', NULL, ?, ?, ?)", (session_uuid, now, now, user_id))
+        return "ok"
+
+
+def fail_stale_mri_jobs(stale_minutes: int) -> int:
+    """Any job still 'processing' after stale_minutes (or left over from a crash) → error."""
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)).isoformat()
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE mri_jobs SET status='error', error='Analysis timed out or was interrupted.', updated_at=? "
+            "WHERE status='processing' AND updated_at < ?", (_now(), cutoff))
+        return cur.rowcount
+
+
+def fail_all_processing_mri_jobs() -> int:
+    """Startup: in-memory engine state is gone, so nothing can still be processing."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE mri_jobs SET status='error', error='Analysis was interrupted by a server restart.', updated_at=? "
+            "WHERE status='processing'", (_now(),))
+        return cur.rowcount
+
+
+def delete_old_mri_jobs(days: int = 7) -> int:
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with get_conn() as conn:
+        return conn.execute("DELETE FROM mri_jobs WHERE status!='processing' AND updated_at < ?", (cutoff,)).rowcount
 
 
 def set_mri_job_status(session_uuid: str, status: str, error: Optional[str] = None) -> None:
@@ -573,7 +783,7 @@ def save_mri_result(
                 1 if findings.get("dis_met") else 0,
                 1 if findings.get("dit_met") else 0,
                 dit_episodes,
-                json.dumps(findings),
+                encrypt_text(json.dumps(findings)),
                 now,
             ),
         )
@@ -791,7 +1001,7 @@ def get_session_export_data(session_uuid: str) -> dict:
 
     return {
         "session_uuid":     session_uuid,
-        "title":            row["title"],
+        "title":            decrypt_text(row["title"]),
         "phase":            row["phase"],
         "tier":             row["tier"],
         "features":         _safe_json(row["features"], []),
@@ -826,7 +1036,7 @@ def get_conclusion(session_uuid: str) -> Optional[dict]:
 def get_all_users_admin() -> list:
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT u.id, u.username, u.email, u.created_at, u.is_admin,
+            SELECT u.id, u.username, u.email, u.created_at, u.is_admin, u.role, u.doctor_status,
                 COUNT(DISTINCT cs.id)  AS session_count,
                 COUNT(DISTINCT m.id)   AS message_count,
                 MAX(CASE WHEN cs.ms_tier='CRITICAL_EMERGENCY' THEN 5
@@ -862,11 +1072,12 @@ def get_user_sessions_with_messages(user_id: int) -> list:
         result = []
         for s in sessions:
             s = dict(s)
+            s["title"] = decrypt_text(s["title"])
             msgs = conn.execute(
                 "SELECT role, content, created_at FROM messages WHERE session_uuid=? ORDER BY id ASC",
                 (s["session_uuid"],),
             ).fetchall()
-            s["messages"] = [dict(m) for m in msgs]
+            s["messages"] = [{**dict(m), "content": decrypt_text(m["content"])} for m in msgs]
             s["conclusion"] = get_conclusion(s["session_uuid"])
             result.append(s)
         return result
@@ -909,29 +1120,460 @@ def get_all_logs(limit: int = 500) -> list:
 
 
 # ── OTP ───────────────────────────────────────────────────────────────────────
+# otp_hash column now holds HMAC-SHA256(JWT_SECRET, salt|email|otp) — see api/routes/password.py
 
-def save_otp(user_id: int, email: str, otp_hash: str, expires_at: str) -> None:
+def save_otp(user_id: int, email: str, otp_mac: str, expires_at: str, salt: str) -> None:
     now = _now()
     with get_conn() as conn:
         conn.execute("UPDATE password_reset_otps SET used=1 WHERE user_id=?", (user_id,))
         conn.execute(
             "INSERT INTO password_reset_otps "
-            "(user_id, email, otp_hash, expires_at, used, created_at) VALUES (?,?,?,?,0,?)",
-            (user_id, email, otp_hash, expires_at, now),
+            "(user_id, email, otp_hash, otp_salt, attempts, locked, expires_at, used, created_at) "
+            "VALUES (?,?,?,?,0,0,?,0,?)",
+            (user_id, email.lower(), otp_mac, salt, expires_at, now),
         )
 
 
-def get_valid_otp(email: str) -> Optional[dict]:
-    now = _now()
+def get_active_otp(email: str) -> Optional[dict]:
+    """Latest unused, unlocked, unexpired OTP for the email (or None)."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM password_reset_otps "
-            "WHERE email=? AND used=0 AND expires_at>? ORDER BY id DESC LIMIT 1",
-            (email.lower(), now),
+            "SELECT * FROM password_reset_otps WHERE email=? AND used=0 AND locked=0 "
+            "AND expires_at>? AND otp_salt!='' ORDER BY id DESC LIMIT 1",
+            (email.lower(), _now()),
         ).fetchone()
         return dict(row) if row else None
 
 
-def mark_otp_used(otp_id: int) -> None:
+def burn_otp_attempt(otp_id: int, max_attempts: int) -> bool:
+    """Atomically spend one attempt BEFORE comparing (parallel guesses can't exceed the cap).
+    Locks the OTP when the cap is reached. Returns False if no attempt was available."""
     with get_conn() as conn:
-        conn.execute("UPDATE password_reset_otps SET used=1 WHERE id=?", (otp_id,))
+        cur = conn.execute(
+            "UPDATE password_reset_otps SET attempts=attempts+1, "
+            "locked=CASE WHEN attempts+1>=? THEN 1 ELSE 0 END "
+            "WHERE id=? AND used=0 AND locked=0 AND attempts<?",
+            (max_attempts, otp_id, max_attempts),
+        )
+        return cur.rowcount == 1
+
+
+def mark_otp_used(otp_id: int) -> bool:
+    """Invalidate after success. Returns False if it was already used (race)."""
+    with get_conn() as conn:
+        return conn.execute("UPDATE password_reset_otps SET used=1 WHERE id=? AND used=0", (otp_id,)).rowcount == 1
+
+
+# ── Single-use token ids, login lockout, quotas, audit ───────────────────────
+
+def consume_jti(jti: str, expires_at: str) -> bool:
+    """Mark a token id as consumed. False if it was already consumed (replay)."""
+    try:
+        with get_conn() as conn:
+            conn.execute("INSERT INTO consumed_tokens (jti, expires_at) VALUES (?,?)", (jti, expires_at))
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def get_lockout_until(identifier: str) -> Optional[str]:
+    with get_conn() as conn:
+        row = conn.execute("SELECT locked_until FROM login_attempts WHERE identifier=?",
+                           (identifier.lower(),)).fetchone()
+    if row and row["locked_until"] and row["locked_until"] > _now():
+        return row["locked_until"]
+    return None
+
+
+def record_login_failure(identifier: str, threshold: int, max_minutes: int) -> None:
+    """Exponential backoff: after `threshold` consecutive failures lock for 1,2,4,… min (capped)."""
+    from datetime import timedelta
+    ident = identifier.lower()[:200]
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT failures FROM login_attempts WHERE identifier=?", (ident,)).fetchone()
+        n = (row["failures"] if row else 0) + 1
+        locked = None
+        if n >= threshold:
+            minutes = min(max_minutes, 2 ** (n - threshold))
+            locked = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+        conn.execute(
+            "INSERT INTO login_attempts (identifier, failures, locked_until, updated_at) VALUES (?,?,?,?) "
+            "ON CONFLICT(identifier) DO UPDATE SET failures=?, locked_until=?, updated_at=?",
+            (ident, n, locked, _now(), n, locked, _now()),
+        )
+
+
+def clear_login_failures(identifier: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM login_attempts WHERE identifier=?", (identifier.lower()[:200],))
+
+
+def consume_quota(user_id: int, kind: str, limit: int) -> bool:
+    """Atomic daily quota (UTC day). Survives session deletion. False → quota exhausted."""
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT count FROM usage_counters WHERE user_id=? AND day=? AND kind=?",
+                           (user_id, day, kind)).fetchone()
+        used = row["count"] if row else 0
+        if used >= limit:
+            return False
+        conn.execute(
+            "INSERT INTO usage_counters (user_id, day, kind, count) VALUES (?,?,?,1) "
+            "ON CONFLICT(user_id, day, kind) DO UPDATE SET count=count+1", (user_id, day, kind))
+        return True
+
+
+def audit(admin_id: Optional[int], admin_username: Optional[str], action: str,
+          target: Optional[str] = None, ip: Optional[str] = None) -> None:
+    """Append-only admin audit trail. Raises on failure — an admin action that can't be
+    audited must not proceed."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO admin_audit (admin_id, admin_username, action, target, ip, created_at) VALUES (?,?,?,?,?,?)",
+            (admin_id, admin_username, action, target, ip, _now()))
+
+
+def get_audit_entries(limit: int = 500) -> list:
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, admin_id, admin_username, action, target, ip, created_at FROM admin_audit "
+            "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+
+
+def housekeeping_db() -> None:
+    """Prune expired security rows."""
+    from datetime import timedelta
+    now = _now()
+    old = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    with get_conn() as conn:
+        conn.execute("DELETE FROM consumed_tokens WHERE expires_at < ?", (now,))
+        conn.execute("DELETE FROM password_reset_otps WHERE expires_at < ?", (old,))
+        conn.execute("DELETE FROM login_attempts WHERE updated_at < ? AND (locked_until IS NULL OR locked_until < ?)", (old, now))
+        conn.execute("DELETE FROM usage_counters WHERE day < date('now','-7 day')")
+
+
+def list_queued_upload_files() -> list:
+    with get_conn() as conn:
+        if not _table_exists(conn, "nifti_queue"):
+            return []
+        out = []
+        for r in conn.execute("SELECT file_path FROM nifti_queue").fetchall():
+            try:
+                d = json.loads(r["file_path"])
+                out += [v for v in (d.get("flair"), d.get("t1")) if v]
+            except Exception:
+                out.append(r["file_path"])
+        return out
+
+
+# ── Security schema (idempotent; called from init_db) ────────────────────────
+
+def migrate_security_v1() -> None:
+    for sql in [
+        "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN password_changed_at TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN consent_at TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN consent_version TEXT DEFAULT NULL",
+        "ALTER TABLE password_reset_otps ADD COLUMN otp_salt TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE password_reset_otps ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE password_reset_otps ADD COLUMN locked INTEGER NOT NULL DEFAULT 0",
+    ]:
+        _safe_alter(sql)
+    with get_conn() as conn:
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS consumed_tokens (
+            jti TEXT PRIMARY KEY, expires_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            identifier TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 0,
+            locked_until TEXT, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS usage_counters (
+            user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day, kind));
+        CREATE TABLE IF NOT EXISTS admin_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_id INTEGER, admin_username TEXT,
+            action TEXT NOT NULL, target TEXT, ip TEXT, created_at TEXT NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS admin_audit_no_update BEFORE UPDATE ON admin_audit
+            BEGIN SELECT RAISE(ABORT, 'admin_audit is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS admin_audit_no_delete BEFORE DELETE ON admin_audit
+            BEGIN SELECT RAISE(ABORT, 'admin_audit is append-only'); END;
+        """)
+    # mri_jobs.user_id (table is created by migrate_add_mri_jobs; make sure both orders work)
+    migrate_add_mri_jobs()
+    _safe_alter("ALTER TABLE mri_jobs ADD COLUMN user_id INTEGER DEFAULT NULL")
+    migrate_add_otp_table()
+    for sql in [
+        "ALTER TABLE password_reset_otps ADD COLUMN otp_salt TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE password_reset_otps ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE password_reset_otps ADD COLUMN locked INTEGER NOT NULL DEFAULT 0",
+    ]:
+        _safe_alter(sql)
+
+
+# ── Roles (patient / doctor / admin) ──────────────────────────────────────────
+
+def migrate_roles_v1() -> None:
+    """users.role ('patient'|'doctor'|'admin'), doctor approval state, env-managed flag,
+    and the mri_scans table (encrypted stored copies a doctor may download)."""
+    for sql in [
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'patient'",
+        "ALTER TABLE users ADD COLUMN doctor_status TEXT DEFAULT NULL",      # pending|approved|removed
+        "ALTER TABLE users ADD COLUMN doctor_license TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN doctor_institution TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN doctor_reviewed_at TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN doctor_reviewed_by TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN env_managed INTEGER NOT NULL DEFAULT 0",
+    ]:
+        _safe_alter(sql)
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET role='admin' WHERE is_admin=1 AND role='patient'")
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS mri_scans (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL REFERENCES users(id),
+            session_uuid TEXT    NOT NULL,
+            file_path    TEXT    NOT NULL,
+            size_bytes   INTEGER NOT NULL DEFAULT 0,
+            suffix       TEXT    NOT NULL DEFAULT '.nii.gz',
+            created_at   TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mri_scans_user    ON mri_scans(user_id);
+        CREATE INDEX IF NOT EXISTS idx_mri_scans_session ON mri_scans(session_uuid);
+        CREATE TABLE IF NOT EXISTS assignments (
+            patient_id  INTEGER PRIMARY KEY REFERENCES users(id),   -- one doctor per patient
+            doctor_id   INTEGER NOT NULL REFERENCES users(id),
+            assigned_at TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_assignments_doctor ON assignments(doctor_id);
+        """)
+
+
+def set_role_admin_from_env(user_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET is_admin=1, role='admin', env_managed=1, doctor_status=NULL WHERE id=?",
+                     (user_id,))
+
+
+def create_env_admin(username: str, email: str, password_hash: str) -> int:
+    now = _now()
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (username, email, password_hash, created_at, is_admin, role, env_managed) "
+            "VALUES (?,?,?,?,1,'admin',1)", (username, email, password_hash, now))
+        return cur.lastrowid
+
+
+def demote_env_admins_except(username: str) -> int:
+    """Rotation safety: an env-managed admin whose name is no longer in ADMIN_USERNAME loses admin."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT id FROM users WHERE env_managed=1 AND is_admin=1 "
+                            "AND username <> ? COLLATE NOCASE", (username,)).fetchall()
+        for r in rows:
+            conn.execute("UPDATE users SET is_admin=0, role='patient', token_version=token_version+1 WHERE id=?",
+                         (r["id"],))
+        return len(rows)
+
+
+def list_doctors(status: Optional[str] = None) -> list:
+    q = ("SELECT id, username, email, created_at, doctor_status, doctor_license, doctor_institution, "
+         "doctor_reviewed_at, doctor_reviewed_by, "
+         "(SELECT COUNT(*) FROM assignments a WHERE a.doctor_id=users.id) AS assigned_count "
+         "FROM users WHERE role='doctor'")
+    args: tuple = ()
+    if status:
+        q += " AND doctor_status=?"
+        args = (status,)
+    q += " ORDER BY CASE doctor_status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, created_at DESC"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
+def set_doctor_status(user_id: int, status: str, reviewer: str) -> bool:
+    """approved | removed. Always bumps token_version so removal kills live sessions at once.
+    Only touches rows whose role is 'doctor'."""
+    if status not in ("approved", "removed"):
+        raise ValueError("invalid status")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE users SET doctor_status=?, doctor_reviewed_at=?, doctor_reviewed_by=?, "
+            "token_version=token_version+1 WHERE id=? AND role='doctor'",
+            (status, _now(), reviewer, user_id))
+        return cur.rowcount > 0
+
+
+def _like_escape(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def search_patients_by_email(query: str, limit: int = 20) -> list:
+    """Patients (role='patient' only — never doctors/admins) whose e-mail contains `query`."""
+    q = f"%{_like_escape(query.strip().lower())}%"
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT u.id, u.username, u.email, u.created_at,
+                      (SELECT COUNT(*) FROM chat_sessions cs WHERE cs.user_id=u.id AND cs.deleted_at IS NULL) AS session_count,
+                      (SELECT COUNT(*) FROM mri_scans ms WHERE ms.user_id=u.id) AS scan_count,
+                      (SELECT cs2.ms_tier FROM chat_sessions cs2 WHERE cs2.user_id=u.id AND cs2.ms_tier IS NOT NULL
+                       ORDER BY cs2.concluded_at DESC LIMIT 1) AS latest_tier
+               FROM users u WHERE u.role='patient' AND u.email LIKE ? ESCAPE '\\'
+               ORDER BY u.email LIMIT ?""", (q, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_patient(user_id: int) -> Optional[dict]:
+    with get_conn() as conn:
+        r = conn.execute("SELECT id, username, email, created_at FROM users WHERE id=? AND role='patient'",
+                         (user_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def get_patient_clinical_overview(user_id: int) -> list:
+    """Per-session symptom picture for a clinician: tier, detected symptoms, features,
+    McDonald fields, risk trajectory, MRI summaries. Deliberately NO chat transcript."""
+    def _j(v, d):
+        try:
+            return json.loads(v) if v else d
+        except Exception:
+            return d
+    out = []
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT session_uuid, created_at, updated_at, tier, features, dis_regions, dit_episodes,
+                      symptom_timeline, tier_log, ms_tier, ms_tier_label, ms_symptoms, concluded_at
+               FROM chat_sessions WHERE user_id=? AND deleted_at IS NULL ORDER BY created_at DESC""",
+            (user_id,)).fetchall()
+        for r in rows:
+            mri = conn.execute(
+                """SELECT id, source, tier, lesion_count, lesion_volume_mm3, lesion_locations,
+                          dis_met, dit_met, created_at FROM mri_results
+                   WHERE session_uuid=? ORDER BY id""", (r["session_uuid"],)).fetchall()
+            out.append({
+                "session_uuid": r["session_uuid"], "created_at": r["created_at"], "updated_at": r["updated_at"],
+                "current_tier": r["tier"], "concluded_tier": r["ms_tier"], "concluded_label": r["ms_tier_label"],
+                "concluded_at": r["concluded_at"],
+                "symptoms": _j(r["ms_symptoms"], []), "features": _j(r["features"], []),
+                "dis_regions": _j(r["dis_regions"], []), "dit_episodes": int(r["dit_episodes"] or 0),
+                "symptom_timeline": _j(r["symptom_timeline"], []), "tier_log": _j(r["tier_log"], []),
+                "mri_results": [{**dict(m), "lesion_locations": _j(m["lesion_locations"], []),
+                                 "dis_met": bool(m["dis_met"]), "dit_met": bool(m["dit_met"])} for m in mri],
+            })
+    return out
+
+
+# ── Stored MRI scans ──────────────────────────────────────────────────────────
+
+def count_scans(user_id: int) -> int:
+    with get_conn() as conn:
+        return conn.execute("SELECT COUNT(*) FROM mri_scans WHERE user_id=?", (user_id,)).fetchone()[0]
+
+
+def add_scan(user_id: int, session_uuid: str, file_path: str, size_bytes: int, suffix: str) -> int:
+    with get_conn() as conn:
+        return conn.execute(
+            "INSERT INTO mri_scans (user_id, session_uuid, file_path, size_bytes, suffix, created_at) "
+            "VALUES (?,?,?,?,?,?)", (user_id, session_uuid, file_path, size_bytes, suffix, _now())).lastrowid
+
+
+def list_scans_for_user(user_id: int) -> list:
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT s.id, s.session_uuid, s.size_bytes, s.created_at,
+                      (SELECT r.tier FROM mri_results r WHERE r.session_uuid=s.session_uuid ORDER BY r.id DESC LIMIT 1) AS tier,
+                      (SELECT r.lesion_count FROM mri_results r WHERE r.session_uuid=s.session_uuid ORDER BY r.id DESC LIMIT 1) AS lesion_count,
+                      (SELECT r.lesion_volume_mm3 FROM mri_results r WHERE r.session_uuid=s.session_uuid ORDER BY r.id DESC LIMIT 1) AS lesion_volume_mm3
+               FROM mri_scans s WHERE s.user_id=? ORDER BY s.created_at DESC""", (user_id,)).fetchall()]
+
+
+def get_scan(scan_id: int) -> Optional[dict]:
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM mri_scans WHERE id=?", (scan_id,)).fetchone()
+        return dict(r) if r else None
+
+
+# ── Patient → doctor assignment (least-loaded) ────────────────────────────────
+
+def _least_loaded_doctor(conn) -> Optional[int]:
+    """Approved doctor with the FEWEST currently assigned patients.
+    Ties → the doctor who was assigned a patient longest ago (never-assigned first), then lowest id."""
+    row = conn.execute(
+        """SELECT u.id FROM users u
+           LEFT JOIN assignments a ON a.doctor_id = u.id
+           WHERE u.role='doctor' AND u.doctor_status='approved'
+           GROUP BY u.id
+           ORDER BY COUNT(a.patient_id) ASC,
+                    COALESCE(MAX(a.assigned_at), '') ASC,
+                    u.id ASC
+           LIMIT 1""").fetchone()
+    return row["id"] if row else None
+
+
+def assign_patient(patient_id: int) -> Optional[int]:
+    """Give the patient a doctor and return the doctor id (None if no approved doctor exists yet).
+    Sticky: a patient who already has an approved doctor keeps them. Runs in one write
+    transaction so two simultaneous uploads can't both see the same 'least loaded' count."""
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            """SELECT a.doctor_id FROM assignments a JOIN users d ON d.id=a.doctor_id
+               WHERE a.patient_id=? AND d.role='doctor' AND d.doctor_status='approved'""",
+            (patient_id,)).fetchone()
+        if cur:
+            return cur["doctor_id"]
+        doc = _least_loaded_doctor(conn)
+        if doc is None:
+            return None
+        conn.execute(
+            "INSERT INTO assignments (patient_id, doctor_id, assigned_at) VALUES (?,?,?) "
+            "ON CONFLICT(patient_id) DO UPDATE SET doctor_id=excluded.doctor_id, assigned_at=excluded.assigned_at",
+            (patient_id, doc, _now()))
+        return doc
+
+
+def assign_unassigned() -> int:
+    """Assign every patient who has an MRI scan but no (valid) doctor — oldest scan first.
+    Called when a doctor is approved/removed and at startup. Returns number assigned."""
+    with get_conn() as conn:
+        ids = [r["user_id"] for r in conn.execute(
+            """SELECT s.user_id FROM mri_scans s JOIN users p ON p.id=s.user_id AND p.role='patient'
+               LEFT JOIN assignments a ON a.patient_id=s.user_id
+               LEFT JOIN users d ON d.id=a.doctor_id AND d.role='doctor' AND d.doctor_status='approved'
+               WHERE d.id IS NULL GROUP BY s.user_id ORDER BY MIN(s.created_at)""").fetchall()]
+    return sum(1 for pid in ids if assign_patient(pid) is not None)
+
+
+def release_doctor_patients(doctor_id: int) -> int:
+    """Drop all of a doctor's assignments (used when the doctor is removed); caller re-runs assign_unassigned()."""
+    with get_conn() as conn:
+        return conn.execute("DELETE FROM assignments WHERE doctor_id=?", (doctor_id,)).rowcount
+
+
+def list_assigned_patients(doctor_id: int) -> list:
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT u.id, u.username, u.email, u.created_at, a.assigned_at,
+                      (SELECT COUNT(*) FROM chat_sessions cs WHERE cs.user_id=u.id AND cs.deleted_at IS NULL) AS session_count,
+                      (SELECT COUNT(*) FROM mri_scans ms WHERE ms.user_id=u.id) AS scan_count,
+                      (SELECT cs2.ms_tier FROM chat_sessions cs2 WHERE cs2.user_id=u.id AND cs2.ms_tier IS NOT NULL
+                       ORDER BY cs2.concluded_at DESC LIMIT 1) AS latest_tier
+               FROM assignments a JOIN users u ON u.id=a.patient_id
+               WHERE a.doctor_id=? AND u.role='patient' ORDER BY a.assigned_at DESC""", (doctor_id,)).fetchall()]
+
+
+def init_all() -> None:
+    """Schema + every migration, in the right order (used by startup and tests)."""
+    init_db()
+    migrate_add_admin_column()
+    migrate_add_logs_table()
+    migrate_add_otp_table()
+    migrate_add_session_state()
+    migrate_add_clinical_state()
+    migrate_add_tier_log()
+    migrate_add_nifti_queue()
+    migrate_add_mri_jobs()
+    migrate_add_mri_case_id()
+    migrate_add_mri_results()
+    migrate_security_v1()
+    migrate_roles_v1()

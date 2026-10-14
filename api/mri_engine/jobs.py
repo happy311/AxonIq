@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from loguru import logger
 
-from api.mri_engine.config import MAX_CONCURRENT_JOBS
+from api.mri_engine.config import MAX_CONCURRENT_JOBS, DEVICE
 from api.mri_engine import pipeline
 
 _job_pool = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS, thread_name_prefix="mri-case-worker")
@@ -36,9 +36,9 @@ def _run_job(flair_path: str, case_id: str, tmp_dir: str):
         with _jobs_lock:
             _jobs[case_id] = {"status": "done", "report": report}
     except Exception as e:
-        logger.error("[MRI Job {}] Pipeline failed: {}", case_id, e)
+        logger.opt(exception=e).error("[MRI Job {}] Pipeline failed", case_id)
         with _jobs_lock:
-            _jobs[case_id] = {"status": "error", "error": str(e)}
+            _jobs[case_id] = {"status": "error", "error": "Pipeline failed (see server log)"}
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -54,6 +54,9 @@ def submit(flair_path: str, tmp_dir: str, case_id: str | None = None) -> dict:
 
     case_id = case_id or datetime.datetime.utcnow().strftime("case_%Y%m%dT%H%M%S%f")
     with _jobs_lock:
+        if len(_jobs) > 200:      # keep the in-memory table bounded (results are persisted in the DB)
+            for k in [k for k, j in _jobs.items() if j["status"] != "processing"][: len(_jobs) - 100]:
+                _jobs.pop(k, None)
         _jobs[case_id] = {"status": "processing"}
     _job_pool.submit(_run_job, flair_path, case_id, tmp_dir)
     return {"case_id": case_id, "status": "processing"}
@@ -81,6 +84,7 @@ def health() -> dict:
     return {
         "ready": pipeline.is_ready(),
         "init_error": pipeline.init_error(),
+        "device": DEVICE,
         "n_models_in_ensemble": pipeline.n_models(),
         "max_concurrent_jobs": MAX_CONCURRENT_JOBS,
         "jobs_processing": n_processing,

@@ -6,7 +6,7 @@
   <title>AxonIQ — AI Clinical Assistant</title>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/variables.css?v=flair-only-1">
-  <link rel="stylesheet" href="/css/auth.css?v=flair-only-1">
+  <link rel="stylesheet" href="/css/auth.css?v=roles-2">
   <link rel="stylesheet" href="/css/shell.css?v=flair-only-1">
   <link rel="stylesheet" href="/css/chat.css?v=flair-only-1">
   <link rel="stylesheet" href="/css/modals.css?v=flair-only-1">
@@ -27,8 +27,8 @@
     </div>
 
     <div class="auth-tabs">
-      <button class="auth-tab active" id="tabLogin"    onclick="switchTab('login')">Sign In</button>
-      <button class="auth-tab"        id="tabRegister" onclick="switchTab('register')">Register</button>
+      <button class="auth-tab active" id="tabLogin"    data-action="switchTab" data-arg="login">Sign In</button>
+      <button class="auth-tab"        id="tabRegister" data-action="switchTab" data-arg="register">Register</button>
     </div>
 
     <div id="authError" class="auth-error"></div>
@@ -46,11 +46,38 @@
       <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password">
     </div>
 
-    <button class="auth-btn" id="authSubmitBtn" onclick="submitAuth()">Sign In</button>
+    <div class="auth-field auth-register-only" id="fieldRole">
+      <label>I am registering as</label>
+      <select id="authRole" data-change="roleChanged">
+        <option value="patient">Patient</option>
+        <option value="doctor">Doctor (needs administrator approval)</option>
+      </select>
+    </div>
+    <div class="auth-field auth-doctor-only" id="fieldLicense">
+      <label>Medical licence number</label>
+      <input type="text" id="authLicense" maxlength="60" autocomplete="off">
+    </div>
+    <div class="auth-field auth-doctor-only" id="fieldInstitution">
+      <label>Hospital / clinic</label>
+      <input type="text" id="authInstitution" maxlength="120" autocomplete="organization">
+    </div>
+
+    <div class="auth-field auth-register-only" id="fieldPrivacy">
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;">
+        <input type="checkbox" id="authPrivacy" style="margin-top:2px;">
+        <span><strong>Privacy notice.</strong> NeuroCheck is an informational screening aid, not a medical
+        diagnosis. Your messages and any MRI you upload are processed by AI services to produce your
+        assessment, stored encrypted, and visible only to you, to authorised administrators, and to doctors approved by an administrator
+        (who can see your assessment symptoms and download your uploaded MRI scans; every administrator and doctor access is logged). You can export or permanently delete your data at any time
+        from the user menu. I have read this and consent to this processing.</span>
+      </label>
+    </div>
+
+    <button class="auth-btn" id="authSubmitBtn" data-action="submitAuth">Sign In</button>
 
     <p id="forgotLink" style="text-align:center;margin-top:12px;font-size:13px;color:var(--muted);">
       Forgot your password?
-      <a onclick="showForgotPassword()" style="color:var(--teal);cursor:pointer;font-weight:500;">Reset it here</a>
+      <a data-action="showForgotPassword" style="color:var(--teal);cursor:pointer;font-weight:500;">Reset it here</a>
     </p>
   </div>
 </div>
@@ -62,7 +89,7 @@
 <div id="appShell">
 
   <header>
-    <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+    <button class="sidebar-toggle" data-action="toggleSidebar" aria-label="Toggle sidebar">☰</button>
     <div class="logo-mark">AQ</div>
     <div class="header-text">
       <h1>AxonIQ</h1>
@@ -70,14 +97,17 @@
     </div>
     <div class="header-right">
       <span class="model-badge">🤖 Agentic AI</span>
-      <div class="user-pill" onclick="toggleUserMenu()" role="button" aria-label="User menu">
+      <div class="user-pill" data-action="toggleUserMenu" role="button" aria-label="User menu">
         <div class="user-avatar" id="headerAvatar">?</div>
         <span class="user-name"  id="headerUsername">…</span>
         <div class="user-dropdown" id="userDropdown">
-          <a onclick="newChat()">＋ New Chat</a>
+          <a data-action="newChat">＋ New Chat</a>
           <hr>
-          <a onclick="showChangePassword()">🔑 Change Password</a>
-          <a onclick="signOut()" class="danger">Sign Out</a>
+          <a data-action="showChangePassword">🔑 Change Password</a>
+          <a data-action="exportMyData">⬇️ Export my data</a>
+          <a data-action="deleteMyAccount" class="danger">🗑 Delete my account</a>
+          <hr>
+          <a data-action="signOut" class="danger">Sign Out</a>
         </div>
       </div>
     </div>
@@ -89,7 +119,7 @@
     <div id="sidebar">
       <div class="sidebar-header">
         <span>Chat History</span>
-        <button class="new-chat-side" onclick="newChat()">+ New</button>
+        <button class="new-chat-side" data-action="newChat">+ New</button>
       </div>
       <div class="session-list" id="sessionList">
         <div class="sidebar-empty" id="sidebarEmpty">
@@ -114,11 +144,11 @@
             <h2>MS Clinical AI Assistant</h2>
             <p>Describe your neurological symptoms in plain language. I will conduct a structured clinical interview, identify MS-specific patterns, and recommend the appropriate workup.</p>
             <div class="welcome-chips">
-              <div class="chip" onclick="sendChip('I have been having blurry vision in my left eye for 3 days and pain when I move my eye.')">👁️ Vision symptoms</div>
-              <div class="chip" onclick="sendChip('Every time I bend my neck forward I get an electric shock running down my spine.')">⚡ Lhermitte sign</div>
-              <div class="chip" onclick="sendChip('I woke up seeing double and my eyes feel jiggly. I also feel like I am on a boat when walking.')">👀 Double vision + balance</div>
-              <div class="chip" onclick="sendChip('I have numbness and tingling in my right arm and leg that started 2 days ago.')">🦾 Numbness / tingling</div>
-              <div class="chip" onclick="sendChip('I feel a tight squeezing band around my chest like a corset being pulled tight.')">🎗️ MS Hug</div>
+              <div class="chip" data-action="sendChip" data-arg="I have been having blurry vision in my left eye for 3 days and pain when I move my eye.">👁️ Vision symptoms</div>
+              <div class="chip" data-action="sendChip" data-arg="Every time I bend my neck forward I get an electric shock running down my spine.">⚡ Lhermitte sign</div>
+              <div class="chip" data-action="sendChip" data-arg="I woke up seeing double and my eyes feel jiggly. I also feel like I am on a boat when walking.">👀 Double vision + balance</div>
+              <div class="chip" data-action="sendChip" data-arg="I have numbness and tingling in my right arm and leg that started 2 days ago.">🦾 Numbness / tingling</div>
+              <div class="chip" data-action="sendChip" data-arg="I feel a tight squeezing band around my chest like a corset being pulled tight.">🎗️ MS Hug</div>
             </div>
           </div>
         </div>
@@ -126,30 +156,30 @@
         <div class="input-area">
           <div class="input-controls">
             <span class="session-id" id="sessionLabel"></span>
-            <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
+            <button class="new-chat-btn" data-action="newChat">+ New Chat</button>
           </div>
 
           <!-- ── MRI Upload Panel (FLAIR-only) ─────────────────────────────── -->
           <div class="mri-panel" id="mriPanel" style="display:none">
             <div class="mri-panel-header">
               <span>🧲 MRI Scan Upload — FLAIR</span>
-              <button class="mri-panel-close" onclick="closeMriPanel()" title="Close">✕</button>
+              <button class="mri-panel-close" data-action="closeMriPanel" title="Close">✕</button>
             </div>
             <div class="mri-slots">
 
-              <!-- Use div+onclick, NOT label wrapping input — avoids double-trigger on file dialog -->
-              <input type="file" id="flairFileInput" accept=".nii,.nii.gz" style="display:none"
-                     onchange="handleMriSlot(this,'flair')">
-              <div class="mri-slot" id="flairSlot" onclick="document.getElementById('flairFileInput').click()">
+              <!-- Use a div with a click action, NOT label wrapping input — avoids double-trigger on file dialog -->
+              <input type="file" id="flairFileInput" accept=".nii,.nii.gz,.zip" style="display:none"
+                     data-change="handleMriSlot" data-arg="flair">
+              <div class="mri-slot" id="flairSlot" data-action="pickFlair">
                 <div class="mri-slot-icon">🟦</div>
                 <div class="mri-slot-label">FLAIR</div>
-                <div class="mri-slot-name" id="flairName">Click to select .nii / .nii.gz</div>
+                <div class="mri-slot-name" id="flairName">Click to select .nii / .nii.gz / DICOM .zip</div>
               </div>
 
             </div>
             <div class="mri-panel-footer">
               <span class="mri-hint" id="mriHint">Select a FLAIR file to enable analysis</span>
-              <button class="mri-analyze-btn" id="mriAnalyzeBtn" onclick="submitMriPair()" disabled>
+              <button class="mri-analyze-btn" id="mriAnalyzeBtn" data-action="submitMriPair" disabled>
                 Analyze MRI
               </button>
             </div>
@@ -157,8 +187,8 @@
           <!-- ─────────────────────────────────────────────────────────────── -->
 
           <div class="input-row">
-            <button class="mri-upload-btn" onclick="toggleMriPanel()" id="mriToggleBtn"
-                    title="Upload FLAIR MRI scan" aria-label="Upload MRI NIfTI file">
+            <button class="mri-upload-btn" data-action="toggleMriPanel" id="mriToggleBtn"
+                    title="Upload FLAIR MRI scan" aria-label="Upload MRI file (NIfTI or DICOM zip)">
               🧲 MRI
             </button>
             <textarea
@@ -168,7 +198,7 @@
               rows="1"
               aria-label="Message input"
             ></textarea>
-            <button class="send-btn" id="sendBtn" onclick="sendMessage()" aria-label="Send message">
+            <button class="send-btn" id="sendBtn" data-action="sendMessage" aria-label="Send message">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"></line>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -204,8 +234,8 @@
       <label>Confirm New Password</label>
       <input type="password" id="pwConfirm" placeholder="Repeat new password">
     </div>
-    <button class="auth-btn"        onclick="submitChangePassword()">Update Password</button>
-    <button class="changepw-cancel" onclick="hideChangePassword()">Cancel</button>
+    <button class="auth-btn"        data-action="submitChangePassword">Update Password</button>
+    <button class="changepw-cancel" data-action="hideChangePassword">Cancel</button>
   </div>
 </div>
 
@@ -231,8 +261,8 @@
         <label>Email Address</label>
         <input type="email" id="fpEmail" placeholder="your@email.com">
       </div>
-      <button class="auth-btn" onclick="fpSendOTP()">Send Reset Code</button>
-      <button class="fp-cancel-link" onclick="hideForgotPassword()">Cancel</button>
+      <button class="auth-btn" data-action="fpSendOTP">Send Reset Code</button>
+      <button class="fp-cancel-link" data-action="hideForgotPassword">Cancel</button>
     </div>
 
     <div id="fpStep2" style="display:none;">
@@ -245,12 +275,12 @@
         <input type="text" id="fpOTP" placeholder="000000" maxlength="6"
                style="letter-spacing:8px;font-size:24px;text-align:center;font-family:monospace;">
       </div>
-      <button class="auth-btn" onclick="fpVerifyOTP()">Verify Code</button>
+      <button class="auth-btn" data-action="fpVerifyOTP">Verify Code</button>
       <p style="text-align:center;margin-top:10px;font-size:12px;color:var(--muted);">
         Didn't receive it?
-        <a onclick="fpSendOTP()" style="color:var(--teal);cursor:pointer;">Resend</a>
+        <a data-action="fpSendOTP" style="color:var(--teal);cursor:pointer;">Resend</a>
         &nbsp;·&nbsp;
-        <a onclick="hideForgotPassword()" style="color:var(--muted);cursor:pointer;">Cancel</a>
+        <a data-action="hideForgotPassword" style="color:var(--muted);cursor:pointer;">Cancel</a>
       </p>
     </div>
 
@@ -263,7 +293,7 @@
         <label>Confirm New Password</label>
         <input type="password" id="fpConfirmPw" placeholder="Repeat new password">
       </div>
-      <button class="auth-btn" onclick="fpSetPassword()">Set New Password</button>
+      <button class="auth-btn" data-action="fpSetPassword">Set New Password</button>
     </div>
   </div>
 </div>
@@ -276,6 +306,7 @@
 <script src="/js/shell.js?v=flair-only-1"></script>
 <script src="/js/chat.js?v=flair-only-1"></script>
 <script src="/js/modals.js?v=flair-only-1"></script>
+<script src="/js/events.js?v=sec-1"></script>
 <script src="/js/app.js?v=flair-only-1"></script>
 
 </body>

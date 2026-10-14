@@ -19,15 +19,20 @@ No `from __future__ import annotations` — required for FastAPI + slowapi.
 import os
 import asyncio
 import uuid as _uuid
-import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, UploadFile, File, BackgroundTasks
 from loguru import logger
 
-from api.core.config import CHAT_RATE_LIMIT
+from api.core import ratelimit
+from api.core.authz import require_session_owner
+from api.core.config import (
+    CHAT_RATE_LIMIT, CHAT_USER_RATE, CHAT_DAILY_QUOTA, MRI_MAX_QUEUE, MRI_DAILY_UPLOAD_QUOTA,
+)
+from api.core.errors import server_error, generic_job_error
 from api.core.limiter import limiter
 from api.core.schemas import ChatRequest, ChatResponse
-from api.auth import get_current_user
+from api.auth import get_current_user, client_ip
 
 router = APIRouter(tags=["chat"])
 
@@ -78,7 +83,6 @@ async def chat_endpoint(
     req: ChatRequest = Body(...),
     current_user: dict = Depends(get_current_user),
 ):
-    from api.agent.chat import chat as agent_chat
     from api.database import (
         create_db_session, save_message, get_session_owner,
         update_session_title, get_message_count, log_action,
@@ -92,6 +96,13 @@ async def chat_endpoint(
 
     user_id = current_user["id"]
 
+    # ── Per-user abuse / cost controls (in addition to the per-IP limit above) ─
+    ratelimit.enforce(f"chat:user:{user_id}", *CHAT_USER_RATE,
+                      detail="You are sending messages too quickly. Please wait a moment.")
+    from api.database import consume_quota
+    if not consume_quota(user_id, "chat", CHAT_DAILY_QUOTA):
+        raise HTTPException(status_code=429, detail="Daily message limit reached. Please come back tomorrow.")
+
     # ── Session management ────────────────────────────────────────────────────
     sid = req.session_id
     if not sid:
@@ -99,16 +110,9 @@ async def chat_endpoint(
         create_db_session(sid, user_id)
         logger.info("[chat] New session: {} user={}", sid, user_id)
     else:
-        owner = get_session_owner(sid)
-        if owner is not None and owner != user_id:
-            raise HTTPException(status_code=403, detail="Session belongs to another user")
-        if owner is None:
-            # Session not found or was soft-deleted.
-            # Always generate a fresh UUID — never reuse a deleted session_uuid
-            # because the old row still exists in DB and would cause a UNIQUE violation.
-            sid = str(_uuid.uuid4())
-            create_db_session(sid, user_id)
-            logger.info("[chat] New session (replaced missing/deleted): {} user={}", sid, user_id)
+        require_session_owner(sid, current_user)    # 404 missing/deleted, 403 someone else's
+
+    from api.agent.chat import chat as agent_chat    # heavy import only after authz/quota pass
 
     # ── Read full clinical state from DB ──────────────────────────────────────
     db_state       = get_session_state(sid)
@@ -123,8 +127,8 @@ async def chat_endpoint(
     save_message(sid, "human", message_text)
     log_action(
         "CHAT_MESSAGE", user_id=user_id, username=current_user["username"],
-        detail=message_text[:120], session_uuid=sid,
-        ip_address=request.client.host if request.client else None,
+        detail=f"len={len(message_text)}", session_uuid=sid,      # metadata only — never message text (PHI)
+        ip_address=client_ip(request),
     )
     if get_message_count(sid) <= 1:
         update_session_title(sid, message_text[:60].strip())
@@ -197,8 +201,7 @@ async def chat_endpoint(
             symptom_timeline=symptom_timeline,
         )
     except Exception as e:
-        logger.error("[chat] Agent error: {}", e)
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+        raise server_error("chat.agent", e)
 
     prose          = result["prose"]
     new_tier       = result["tier"]
@@ -275,82 +278,82 @@ async def upload_nifti(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Upload a FLAIR NIfTI file for MRI analysis. Must be .nii or .nii.gz.
+    Upload a FLAIR NIfTI (.nii / .nii.gz) for analysis.
 
-    Frontend workflow:
-      1. POST the file here → {status: "processing"} (analysis starts immediately
-         in the background — this call returns in well under a second)
-      2. Poll GET /mri/status/{session_id} every few seconds until status is
-         "done" (or "error")
-      3. Call GET /mri/result/{session_id} once to fetch the assistant's response
+    Hardening (in order): ownership → daily quota → 1 active job/user + bounded global queue →
+    stream to a private 0600 file with a hard byte cap → gzip/NIfTI magic → sandboxed subprocess
+    validation (RLIMIT memory/CPU, wall-clock timeout, decompressed-size + voxel limits) →
+    background analysis. The temp file is ALWAYS removed (success, failure, or timeout).
+
+    Frontend workflow: POST here → poll /mri/status/{id} → GET /mri/result/{id}.
     """
-    from api.database import get_session_owner, create_mri_job
-
-    owner = get_session_owner(session_id)
-    if owner != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    MAX_BYTES = 500 * 1024 * 1024  # 500 MB per file
-
-    def _validate_and_save(upload: UploadFile, label: str) -> str:
-        fname = upload.filename or ""
-        if not (fname.endswith(".nii.gz") or fname.endswith(".nii")):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only NIfTI files (.nii.gz or .nii) are accepted for {label}.",
-            )
-        return fname
-
-    flair_fname = _validate_and_save(flair, "FLAIR")
-
-    flair_contents = await flair.read()
-
-    if len(flair_contents) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="FLAIR file too large (max 500 MB)")
-
-    def _write_tmp(contents: bytes, fname: str) -> str:
-        suffix = ".nii.gz" if fname.endswith(".nii.gz") else ".nii"
-        tmp = tempfile.NamedTemporaryFile(
-            delete=False, suffix=suffix, prefix=f"mri_{session_id}_",
-        )
-        tmp.write(contents)
-        tmp.close()
-        return tmp.name
-
-    flair_path = _write_tmp(flair_contents, flair_fname)
-
-    # Mark the job as processing BEFORE scheduling the background task, so a
-    # status poll that lands the instant after this response is sent never
-    # sees "no job found" (a brief false-negative race).
-    create_mri_job(session_id)
-
-    background_tasks.add_task(
-        _run_mri_analysis_background,
-        session_id,
-        {"flair": flair_path, "t1": None},
-        current_user["id"],
+    from api.database import consume_quota, try_start_mri_job, set_mri_job_status
+    from api.mri_engine.upload_security import (
+        allowed_suffix, stream_to_disk, quick_magic_check, validate_in_sandbox,
     )
 
-    logger.info(
-        "[MRI Upload] session={} flair={} ({:.1f}MB) — analysis scheduled in background",
-        session_id,
-        flair_fname, len(flair_contents) / (1024 * 1024),
-    )
+    require_session_owner(session_id, current_user)
+    user_id = current_user["id"]
+    suffix = allowed_suffix(flair.filename)        # extension only; the name is never used for a path
 
+    if not consume_quota(user_id, "mri_upload", MRI_DAILY_UPLOAD_QUOTA):
+        raise HTTPException(status_code=429, detail="Daily MRI upload limit reached. Please try again tomorrow.")
+
+    gate = try_start_mri_job(session_id, user_id, MRI_MAX_QUEUE)
+    if gate == "user_busy":
+        raise HTTPException(status_code=409, detail="You already have an MRI analysis in progress.")
+    if gate == "queue_full":
+        raise HTTPException(status_code=503, detail="The analysis queue is full. Please try again in a few minutes.",
+                            headers={"Retry-After": "300"})
+
+    path = None
+    try:
+        path, size = await stream_to_disk(flair, suffix)
+        quick_magic_check(path, suffix)
+        converted_slices = 0
+        if suffix == ".zip":                                  # DICOM series → one NIfTI volume
+            from api.mri_engine.upload_security import convert_dicom_zip_in_sandbox
+            path, converted_slices = await convert_dicom_zip_in_sandbox(path)   # zip deleted on success
+            suffix, size = ".nii.gz", os.path.getsize(path)
+        await validate_in_sandbox(path)
+        from api.database import count_scans
+        from api.core.config import MRI_STORE_MAX_PER_USER
+        if count_scans(user_id) >= MRI_STORE_MAX_PER_USER:
+            raise HTTPException(status_code=409, detail=(
+                f"You have reached the limit of {MRI_STORE_MAX_PER_USER} stored MRI scans. "
+                "Delete an older chat session that contains a scan, then try again."))
+        # Keep an encrypted copy so an approved doctor can download it (the temp file is still removed).
+        from api.mri_engine.scan_store import store_scan
+        await asyncio.to_thread(store_scan, path, user_id, session_id, size, suffix)
+        try:                                   # route the patient to the least-loaded approved doctor
+            from api.database import assign_patient
+            await asyncio.to_thread(assign_patient, user_id)
+        except Exception as e:                 # never fail an upload because of assignment
+            logger.error("[assign] failed for user {}: {}", user_id, type(e).__name__)
+    except HTTPException as e:
+        if path:
+            Path(path).unlink(missing_ok=True)
+        set_mri_job_status(session_id, "error", error=str(e.detail)[:200])   # validator message is ours, safe to show
+        raise
+    except Exception as e:
+        if path:
+            Path(path).unlink(missing_ok=True)
+        err = server_error("mri.upload", e)
+        set_mri_job_status(session_id, "error", error=generic_job_error())
+        raise err
+
+    background_tasks.add_task(_run_mri_analysis_background, session_id, {"flair": path, "t1": None}, user_id)
+    logger.info("[MRI Upload] session={} ({:.1f}MB) validated — analysis scheduled", session_id, size / (1024 * 1024))
     return {
-        "status":       "processing",
-        "message":      "MRI file received. Analysis has started — poll /mri/status for progress.",
-        "flair_mb":     round(len(flair_contents) / (1024 * 1024), 1),
+        "status":   "processing",
+        "message":  "MRI file received. Analysis has started — poll /mri/status for progress.",
+        "flair_mb": round(size / (1024 * 1024), 1),
+        "converted_from_dicom_slices": converted_slices or None,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Background MRI analysis runner
-#
-# Runs the exact same agent turn the old synchronous flow used
-# (api.agent.chat.chat with nifti_paths set), just off the request/response
-# cycle. FastAPI executes sync BackgroundTasks in a worker thread, so this
-# does not block the event loop or any other request.
+# Background MRI analysis runner (sync BackgroundTask → worker thread)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_mri_analysis_background(session_id: str, nifti_paths: dict, user_id: int) -> None:
@@ -365,9 +368,6 @@ def _run_mri_analysis_background(session_id: str, nifti_paths: dict, user_id: in
     try:
         db_state = get_session_state(session_id)
         history  = [{"role": m["role"], "content": m["content"]} for m in get_messages(session_id)]
-
-        # Persist the synthetic trigger message so the transcript stays complete —
-        # mirrors what the old frontend-sent /chat message did.
         save_message(session_id, "human", _SYNTHETIC_USER_MSG)
         human_turns = sum(1 for m in history if m["role"] == "human") + 1
 
@@ -385,8 +385,6 @@ def _run_mri_analysis_background(session_id: str, nifti_paths: dict, user_id: in
         )
 
         prose = result["prose"]
-
-        # ── Save completed MRI result for progression tracking ────────────────
         mri_report = result.get("mri_report")
         if result.get("mri_results_ready") and mri_report and not mri_report.get("parse_failed"):
             prose = _persist_mri_result_and_append_progression(
@@ -404,15 +402,24 @@ def _run_mri_analysis_background(session_id: str, nifti_paths: dict, user_id: in
         )
         touch_session(session_id)
         set_mri_job_status(session_id, "done")
-
         logger.info("[MRI Background] session={} analysis complete, tier={}", session_id, result["tier"])
 
     except Exception as e:
-        logger.error("[MRI Background] session={} failed: {}", session_id, e)
+        # Full detail stays in the server log; the client only ever sees a generic message + ref id.
+        logger.opt(exception=e).error("[MRI Background] session={} failed", session_id)
         try:
-            set_mri_job_status(session_id, "error", error=str(e)[:300])
+            set_mri_job_status(session_id, "error", error=generic_job_error())
         except Exception:
             pass
+    finally:
+        # The temp upload must never outlive the job, whatever happened.
+        for key in ("flair", "t1"):
+            p = (nifti_paths or {}).get(key)
+            if p:
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -458,11 +465,9 @@ async def mri_status(
 
     status: "processing" | "done" | "error" | "none" (no job found for this session)
     """
-    from api.database import get_session_owner, get_mri_job
+    from api.database import get_mri_job
 
-    owner = get_session_owner(session_id)
-    if owner is not None and owner != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    require_session_owner(session_id, current_user)
 
     job = get_mri_job(session_id)
     if not job:
@@ -481,11 +486,9 @@ async def mri_result(
     Returns 409 if the job isn't finished yet — the frontend should keep
     polling /mri/status instead of calling this early.
     """
-    from api.database import get_session_owner, get_mri_job, get_messages
+    from api.database import get_mri_job, get_messages
 
-    owner = get_session_owner(session_id)
-    if owner is not None and owner != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    require_session_owner(session_id, current_user)
 
     job = get_mri_job(session_id)
     if not job or job["status"] != "done":
@@ -550,12 +553,10 @@ async def export_session_summary(
       - neurologist_note
       - tier_log (risk trajectory across the conversation)
     """
-    from api.database import get_session_owner, get_session_export_data, get_tier_log
-    from api.agent.chat import generate_summary
+    from api.database import get_session_export_data, get_tier_log
 
-    owner = get_session_owner(session_id)
-    if owner is not None and owner != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    require_session_owner(session_id, current_user)
+    from api.agent.chat import generate_summary      # heavy import only after authz passes
 
     export_data = get_session_export_data(session_id)
     if not export_data:
@@ -601,11 +602,9 @@ async def get_tier_log_endpoint(
     current_user: dict = Depends(get_current_user),
 ):
     """Return the risk tier progression across the conversation."""
-    from api.database import get_session_owner, get_tier_log
+    from api.database import get_tier_log
 
-    owner = get_session_owner(session_id)
-    if owner is not None and owner != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    require_session_owner(session_id, current_user)
 
     return {"session_id": session_id, "tier_log": get_tier_log(session_id)}
 
@@ -630,35 +629,30 @@ async def user_sessions(current_user: dict = Depends(get_current_user)):
 
 @router.get("/session/{session_id}/history")
 async def session_history(session_id: str, current_user: dict = Depends(get_current_user)):
-    from api.database import get_messages, get_session_owner
-    owner = get_session_owner(session_id)
-    if owner is not None and owner != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+    from api.database import get_messages
+    require_session_owner(session_id, current_user)
     return {"session_id": session_id, "messages": get_messages(session_id)}
 
 
 @router.delete("/session/{session_id}")
 async def delete_session(session_id: str, current_user: dict = Depends(get_current_user)):
     """
-    Soft-delete a session.
-    Idempotent: deleting an already-deleted or non-existent session returns 200.
-
-    NOTE: we intentionally do NOT pre-create a replacement session here.
-    Pre-creating caused a phantom "New Chat" entry to appear in the sidebar
-    immediately after deletion, making it look like the chat wasn't deleted.
-    The frontend creates a new session naturally when the user sends their
-    first message after deletion.
+    HARD-delete a session: messages, MRI results, job rows and any queued upload files are
+    permanently removed. Idempotent: an already-deleted/non-existent session returns 200;
+    someone else's session returns 403.
     """
     from api.database import get_session_owner, delete_db_session
 
     owner = get_session_owner(session_id)
-
     if owner is None:
-        # Already deleted or never existed — treat as success (idempotent)
         return {"deleted": session_id}
     if owner != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    delete_db_session(session_id)
-    logger.info("[chat] Deleted session={}", session_id)
+    for f in delete_db_session(session_id):
+        try:
+            Path(f).unlink(missing_ok=True)
+        except OSError:
+            pass
+    logger.info("[chat] Hard-deleted session={}", session_id)
     return {"deleted": session_id}

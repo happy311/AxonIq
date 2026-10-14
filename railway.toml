@@ -1,24 +1,25 @@
-# ── NeuroCheck v8.0 — Railway Deployment Config ──────────────────────────────
-# Deploy to Railway: https://railway.app
-# Steps:
-#   1. railway login
-#   2. railway init  (in this folder)
-#   3. railway up
-#   4. railway domain  (get your public URL)
-#
-# Or connect GitHub repo in Railway dashboard for auto-deploy on push.
+# ── AxonIQ — Railway ─────────────────────────────────────────────────────────
+# Requirements (set in the Railway dashboard — they cannot be expressed in this file):
+#   • a PAID plan with >= 8 GB RAM (MRI engine)
+#   • a Volume attached to this service, mount path:  /data       (DB + Chroma persist here)
+#   • Variables (Settings → Variables), as secrets: JWT_SECRET, DATA_ENCRYPTION_KEY,
+#     ANTHROPIC_API_KEY, SMTP_EMAIL, SMTP_PASSWORD, MRI_CHECKPOINT_SHA256, PUBLIC_BASE_URL
+#   • Run `python make_admin.py <username>` via `railway run`/shell after the first registration.
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python3 -m uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 1800"
+# Single worker (in-process MRI state). Railway terminates TLS and forwards X-Forwarded-*;
+# its edge is not a fixed IP, so trust forwarded headers only from the private range.
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 1800 --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-100.64.0.0/10}"
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [environments.production.variables]
-SPACY_MODEL = "/app/en_model"
+ENV = "production"
 PYTHONUNBUFFERED = "1"
+MRI_DEVICE = "cpu"

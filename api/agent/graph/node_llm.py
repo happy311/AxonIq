@@ -488,16 +488,21 @@ def node_llm_response(state: AgentState) -> dict:
     else:
         goal_instr = gather(turns, features, dis_regions)
 
-    system = SYSTEM_PROMPT + goal_instr + rag_block(rag_ctx)
+    from api.agent.safety import UNTRUSTED_RULES, wrap_patient, trim_history, strip_tags
+    from api.core.config import HISTORY_TOKEN_BUDGET
+    system = SYSTEM_PROMPT + UNTRUSTED_RULES + goal_instr + rag_block(rag_ctx)
 
     # ── Build message chain ───────────────────────────────────────────────────
+    # History is capped by a token budget (cost control) — the deterministic symptom-DB
+    # scan below still sees the FULL history, so old symptoms keep counting.
+    # All patient text is wrapped in delimiters and declared untrusted in the system prompt.
     msgs = [SystemMessage(content=system)]
-    for m in history[:-1]:
+    for m in trim_history(history[:-1], HISTORY_TOKEN_BUDGET):
         msgs.append(
-            HumanMessage(content=m["content"]) if m["role"] == "human"
-            else AIMessage(content=m["content"])
+            HumanMessage(content=wrap_patient(m["content"])) if m["role"] == "human"
+            else AIMessage(content=strip_tags(m["content"]))
         )
-    msgs.append(HumanMessage(content=state["user_message"]))
+    msgs.append(HumanMessage(content=wrap_patient(state["user_message"])))
 
     # ── LLM call with retry on suspicious parse ───────────────────────────────
     prose        = ""
@@ -511,7 +516,7 @@ def node_llm_response(state: AgentState) -> dict:
         try:
             raw = llm.invoke(msgs)
             raw = raw.content if hasattr(raw, "content") else str(raw)
-            raw = _JUNK.sub("", raw).strip()
+            raw = strip_tags(_JUNK.sub("", raw)).strip()
 
             # ── [fix] Safety-override marker: catches emergency-level symptoms
             # described in ANY goal/phase, not just "gathering" — none of

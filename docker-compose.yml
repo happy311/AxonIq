@@ -1,61 +1,104 @@
-version: "3.9"
-
-# ── NeuroCheck v8.0 — Docker Compose ─────────────────────────────────────────
-# Usage:
-#   docker compose up           → start everything
-#   docker compose up --build   → rebuild and start
-#   docker compose down         → stop and remove containers
+# ── AxonIQ / NeuroCheck — production compose ─────────────────────────────────
+#   cp .env.example .env   # fill in real secrets (JWT_SECRET, DATA_ENCRYPTION_KEY, ANTHROPIC_API_KEY, SMTP_*)
+#   docker compose up -d --build
+# Only Traefik publishes ports (80/443). The API is reachable solely through the proxy.
+# Single API worker by design (MRI engine state lives in-process).
+name: axoniq
 
 services:
-
-  # ── API Server ──────────────────────────────────────────────────────────────
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: neurocheck-api
+    build: { context: ., dockerfile: Dockerfile }
+    image: axoniq-api:local
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    env_file: .env                          # secrets come from here (or Docker/Swarm secrets) — never baked in
     environment:
-      - SPACY_MODEL=/app/en_model
-      - PORT=8000
+      ENV: production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}                       # exact origins, "" = same-origin only
+      PUBLIC_BASE_URL: https://${DOMAIN:?set DOMAIN in .env}
+      FORWARDED_ALLOW_IPS: 172.28.0.0/24                           # the proxy subnet below — NOT "*"
+    # No source bind-mounts: the image is the only code that runs.
+    expose: ["8000"]                        # internal only; no `ports:`
+    networks:
+      edge: { ipv4_address: 172.28.0.20 }
+    volumes:
+      - axoniq_data:/data                                          # DB + Chroma (use an encrypted disk)
+      - ./checkpoints:/app/checkpoints:ro                          # hash-pinned *.pt, read-only
+      - axoniq_backups:/backups                                    # backups live OFF the data volume
+    read_only: true
+    tmpfs:
+      - /tmp:size=4g,mode=1777,nosuid                       # uploads + MRI scratch, wiped on restart
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    deploy:
+      resources:
+        limits: { cpus: "4.0", memory: 12g }
+        reservations: { memory: 6g }
     healthcheck:
-      test: ["CMD", "python3", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
-    volumes:
-      # Mount source for hot-reload during development
-      - ./api:/app/api:ro
-      - ./frontend:/app/frontend:ro
+      start_period: 90s
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.neurocheck.rule=Host(`neurocheck.yourdomain.com`)"
-      - "traefik.http.routers.neurocheck.tls=true"
-      - "traefik.http.routers.neurocheck.tls.certresolver=letsencrypt"
+      - traefik.enable=true
+      - traefik.docker.network=axoniq_edge
+      - traefik.http.routers.api.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls=true
+      - traefik.http.routers.api.tls.certresolver=letsencrypt
+      - traefik.http.services.api.loadbalancer.server.port=8000
+      # HSTS at the edge too (the app also sends it)
+      - traefik.http.routers.api.middlewares=hsts
+      - traefik.http.middlewares.hsts.headers.stsSeconds=63072000
+      - traefik.http.middlewares.hsts.headers.stsIncludeSubdomains=true
+      # 80 → 443 redirect
+      - traefik.http.routers.api-http.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.api-http.entrypoints=web
+      - traefik.http.routers.api-http.middlewares=https-redirect
+      - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
 
-  # ── Reverse Proxy (optional — for production with HTTPS) ────────────────────
-  # Uncomment this block to enable Traefik with automatic Let's Encrypt SSL.
-  # Update the domain in the api service labels above.
-  #
-  # proxy:
-  #   image: traefik:v3.0
-  #   container_name: traefik
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #     - ./traefik/acme.json:/acme.json
-  #   command:
-  #     - "--providers.docker=true"
-  #     - "--providers.docker.exposedbydefault=false"
-  #     - "--entrypoints.web.address=:80"
-  #     - "--entrypoints.websecure.address=:443"
-  #     - "--certificatesresolvers.letsencrypt.acme.email=your@email.com"
-  #     - "--certificatesresolvers.letsencrypt.acme.storage=/acme.json"
-  #     - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+  proxy:
+    image: traefik:v3.1
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=axoniq_edge
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # keep long MRI uploads / polls alive
+      - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=1800s
+      - --entrypoints.websecure.http.tls.minVersion=VersionTLS12
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?set ACME_EMAIL in .env}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=false
+      - --accesslog=false                       # URLs can contain session ids; app logs carry request-ids
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # NOTE: docker.sock is root-equivalent — see README_DEPLOY_AWS.md (socket-proxy option)
+      - traefik_certs:/letsencrypt
+    networks:
+      edge: { ipv4_address: 172.28.0.10 }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 256m }
+
+networks:
+  edge:
+    name: axoniq_edge
+    ipam:
+      config: [{ subnet: 172.28.0.0/24 }]
+
+volumes:
+  axoniq_data:
+  axoniq_backups:
+  traefik_certs:

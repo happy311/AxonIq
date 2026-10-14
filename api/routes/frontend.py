@@ -48,6 +48,12 @@ async def serve_admin():
     return HTMLResponse(content=_read_html("admin.html"), status_code=200)
 
 
+@router.get("/doctor",  response_class=HTMLResponse)
+@router.get("/doctor/", response_class=HTMLResponse)
+async def serve_doctor():
+    return HTMLResponse(content=_read_html("doctor.html"), status_code=200)
+
+
 def mount_static(app) -> None:
     """
     Mount frontend sub-directories so chat.html can load:

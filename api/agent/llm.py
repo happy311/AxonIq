@@ -34,6 +34,9 @@ from api.core.config import (
 
 # ── Shared response wrapper (mimics LangChain AIMessage) ─────────────────────
 
+from api.core.config import LLM_TIMEOUT_S as _TIMEOUT, LLM_MAX_TOKENS as _MAX_TOKENS
+
+
 class _FakeResponse:
     """Uniform response wrapper so every backend looks identical upstream."""
     def __init__(self, content: str):
@@ -95,7 +98,9 @@ class _ClaudeLLM:
 
     def __init__(self, api_key: str, primary_model: str):
         import anthropic
-        self._client = anthropic.Anthropic(api_key=api_key)
+        from api.core.config import LLM_TIMEOUT_S
+        # hard timeout + bounded retries: a hung upstream can't pin a worker thread forever
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=LLM_TIMEOUT_S, max_retries=1)
 
         # Build ordered model list: primary first, then fallbacks (deduplicated)
         models: list[str] = [primary_model]
@@ -148,7 +153,7 @@ class _ClaudeLLM:
             turns = [{"role": "user", "content": "Continue."}]
 
         kwargs: dict = {
-            "max_tokens":  1024,
+            "max_tokens":  _MAX_TOKENS,
             "temperature": 0.1,
             "messages":    turns,
         }
@@ -256,7 +261,7 @@ class _HFChatLLM:
                 # moved to third-party partner providers (Together, Novita,
                 # Fireworks, etc.) that HF now routes to. provider="auto" lets
                 # it search all of them instead of just HF's own limited set.
-                client = InferenceClient(model=model, token=self._token, provider="auto")
+                client = InferenceClient(model=model, token=self._token, provider="auto", timeout=_TIMEOUT)
                 client.chat_completion(
                     model=model,
                     messages=[{"role": "user", "content": "Hi"}],
@@ -285,7 +290,7 @@ class _HFChatLLM:
                 resp = self._inner.chat_completion(
                     model=self._model,
                     messages=messages,
-                    max_tokens=1024,
+                    max_tokens=_MAX_TOKENS,
                     temperature=0.15,
                 )
                 content = resp.choices[0].message.content
@@ -390,7 +395,8 @@ def _build_llm():
         model=OLLAMA_MODEL,
         base_url=OLLAMA_BASE_URL,
         temperature=0.15,
-        num_predict=1024,
+        num_predict=_MAX_TOKENS,
+        client_kwargs={"timeout": _TIMEOUT},
     )
 
 

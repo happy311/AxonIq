@@ -103,15 +103,15 @@ def node_mri_analysis(state: AgentState) -> dict:
     if nifti_paths and nifti_paths.get("flair"):
         flair_path = nifti_paths["flair"]
 
-        raw_response = _call_nifti_service(flair_path, session_id=state.get("session_id"))
-
-        # Clean up the temp NIfTI file immediately after the service call —
-        # it can be 100-500 MB and is not needed once sent.
         import os as _os
         try:
-            _os.unlink(flair_path)
-        except Exception:
-            pass
+            raw_response = _call_nifti_service(flair_path, session_id=state.get("session_id"))
+        finally:
+            # Always remove the uploaded temp file (100-500 MB), success or failure.
+            try:
+                _os.unlink(flair_path)
+            except Exception:
+                pass
 
         if raw_response is None:
             return {
@@ -258,7 +258,8 @@ def _call_nifti_service(flair_path: str, session_id: str | None = None) -> dict 
 
     POLL_INTERVAL_S = 2.0
 
-    tmp_dir = tempfile.mkdtemp(prefix="mricase_")
+    from api.mri_engine.config import UPLOAD_DIR
+    tmp_dir = tempfile.mkdtemp(prefix="mricase_", dir=UPLOAD_DIR)   # private dir (0700), swept by the janitor
     case_flair_path = os.path.join(tmp_dir, "FLAIR.nii.gz")
     try:
         shutil.copy(flair_path, case_flair_path)
@@ -273,11 +274,13 @@ def _call_nifti_service(flair_path: str, session_id: str | None = None) -> dict 
 
     if submitted.get("error"):
         logger.warning("[MRI] Engine rejected submission: {}", submitted.get("error", "?"))
+        shutil.rmtree(tmp_dir, ignore_errors=True)
         return None
 
     case_id = submitted.get("case_id")
     if not case_id:
         logger.warning("[MRI] Engine response missing case_id: {}", submitted)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
         return None
 
     logger.info("[MRI] Submitted as case_id={} — polling for result …", case_id)

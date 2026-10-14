@@ -26,7 +26,7 @@ from api.mri_engine.postprocess import suppress_small_components, build_zone_rep
 # ── Process-wide engine state ────────────────────────────────────────────────
 _state_lock = threading.Lock()
 _loaded_models: list | None = None      # [(model, axis, orientation, fold), ...] — exactly 3
-_cpu_lock = threading.Semaphore(1)      # serializes the actual forward-pass step
+_inference_lock = threading.Semaphore(1)      # serializes the actual forward-pass step (also protects a single GPU's VRAM if MRI_DEVICE=cuda)
 _ready = False
 _init_error: str | None = None
 
@@ -81,7 +81,8 @@ def initialize():
                 print("  [warmup] Skipping skull-strip / zone-atlas warm-up -- no template to test against.")
 
             _ready = True
-            print(f"[MRI Engine] Ready — {len(_loaded_models)} models loaded, CPU-only.")
+            from api.mri_engine.config import DEVICE
+            print(f"[MRI Engine] Ready — {len(_loaded_models)} models loaded (device: {DEVICE}).")
         except CheckpointError as e:
             _init_error = str(e)
             print(f"[MRI Engine] STARTUP FAILED: {e}")
@@ -103,7 +104,7 @@ def run_pipeline(flair_path: str, case_id: str) -> dict:
 
     # Serialize the actual model forward passes — preprocessing (registration,
     # skull-strip) for other in-flight cases can still proceed while this waits.
-    with _cpu_lock:
+    with _inference_lock:
         all_probs = [predict_volume_probs_multimod(model, processed_arrs, axis)
                      for model, axis, orientation, fold in _loaded_models]
     ensemble_probs = np.mean(all_probs, axis=0)

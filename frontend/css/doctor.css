@@ -1,0 +1,18 @@
+/* Doctor + admin-doctor-table extras (loaded after admin.css) */
+.doc-table{width:100%;border-collapse:collapse;font-size:13px;}
+.doc-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);}
+.doc-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;}
+.doc-status-pending{background:#FEF3C7;color:#92400E;}
+.doc-status-approved{background:#D1FAE5;color:#065F46;}
+.doc-status-removed{background:#FEE2E2;color:#B91C1C;}
+.search-row{display:flex;gap:8px;}
+.search-row .search-input{flex:1;}
+.hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4;}
+.dl-btn{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--teal);color:#fff;font-size:12px;font-weight:600;text-decoration:none;}
+.dl-btn:hover{opacity:.9;}
+.sess-block{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:#fff;}
+.sess-block h4{font-size:14px;margin-bottom:6px;}
+.kv{font-size:12px;color:var(--muted);margin:6px 0 4px;text-transform:uppercase;letter-spacing:.4px;}
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.tabs{display:flex;gap:8px;margin:14px 0;}
+.tabs .export-btn.active{background:var(--teal);color:#fff;border-color:var(--teal);}

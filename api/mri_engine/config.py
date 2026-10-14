@@ -11,8 +11,8 @@ Key changes from the notebook:
   - Exactly ONE checkpoint per orientation (axial, coronal, sagittal) is
     expected — 3 total, not a fold×orientation ensemble of up to 15. See
     api/mri_engine/checkpoints.py for the loader that enforces this.
-  - DEVICE defaults to "cpu" (override with env var MRI_DEVICE=cuda if you
-    later attach a GPU instance — nothing else needs to change).
+  - DEVICE auto-detects a GPU if one is visible to torch, otherwise falls
+    back to CPU. Force one or the other with env var MRI_DEVICE=cuda|cpu.
   - No Flask app, no Swagger, no Cloudflare tunnel — this becomes a normal
     background job inside the same Uvicorn process. See jobs.py.
 """
@@ -23,9 +23,31 @@ from pathlib import Path
 from api.core.config import BASE_DIR
 
 # ── Device ────────────────────────────────────────────────────────────────────
-# "Only on CPU first" — default to cpu. Set MRI_DEVICE=cuda later if you attach
-# a GPU instance; nothing else in this package needs to change.
-DEVICE = os.environ.get("MRI_DEVICE", "cpu")
+# Auto-detects: uses a GPU if torch can see one, otherwise CPU. Set
+# MRI_DEVICE=cpu to force CPU even with a GPU present, or MRI_DEVICE=cuda to
+# require a GPU (fails loudly at startup if none is actually available,
+# rather than silently falling back).
+_requested_device = os.environ.get("MRI_DEVICE", "auto").lower()
+
+if _requested_device == "auto":
+    try:
+        import torch
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        DEVICE = "cpu"
+elif _requested_device == "cuda":
+    import torch
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "MRI_DEVICE=cuda was set but torch.cuda.is_available() is False. "
+            "Either the instance has no GPU attached, the NVIDIA driver isn't "
+            "installed/visible in this container, or a CPU-only torch build "
+            "is installed (see requirements-gpu.txt). Set MRI_DEVICE=auto or "
+            "MRI_DEVICE=cpu to run without a GPU."
+        )
+    DEVICE = "cuda"
+else:
+    DEVICE = _requested_device   # e.g. "cpu", or "cuda:1" for a specific GPU
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 # Checkpoints ship in the repo as an (empty, .gitkeep'd) folder — drop your
@@ -37,7 +59,9 @@ CHECKPOINT_DIR = os.environ.get("MRI_CHECKPOINT_DIR", str(BASE_DIR / "checkpoint
 # nothing in WORK_DIR needs to survive a restart; templates/atlases just get
 # re-downloaded once on next startup).
 WORK_DIR = os.environ.get("MRI_WORK_DIR", "/tmp/axoniq_mri")
-TEMPLATE_CACHE = os.path.join(WORK_DIR, "templateflow")
+# In the container image the templates/atlases/pretrained nets are BAKED at build time into a
+# read-only path (MRI_TEMPLATE_CACHE / MRI_ATLAS_DATASET_DIR) — no runtime downloads.
+TEMPLATE_CACHE = os.environ.get("MRI_TEMPLATE_CACHE", os.path.join(WORK_DIR, "templateflow"))
 os.makedirs(TEMPLATE_CACHE, exist_ok=True)
 os.environ.setdefault("TEMPLATEFLOW_HOME", TEMPLATE_CACHE)
 
@@ -108,10 +132,11 @@ ZONE_NAMES = {
 }
 
 # ── Job concurrency ───────────────────────────────────────────────────────────
-# CPU-only + a single small (3-model) ensemble still means each case is a
-# genuinely heavy job (registration + skull-strip + 3x forward passes over a
-# full volume). Default to running one case at a time; raise only if your AWS
-# instance has CPU/RAM headroom to spare.
+# Registration + skull-strip (ANTs, CPU-bound regardless of DEVICE) still
+# dominate the wall clock per case even on a GPU — only the 3-model ensemble
+# forward pass itself gets faster. Default to running one case at a time;
+# raise MRI_MAX_CONCURRENT_JOBS if your instance (CPU cores, or GPU + enough
+# host RAM for concurrent registrations) has headroom to spare.
 MAX_CONCURRENT_JOBS = int(os.environ.get("MRI_MAX_CONCURRENT_JOBS", "1"))
 
 # Total submit→done budget a caller should wait before giving up (used by
@@ -119,3 +144,11 @@ MAX_CONCURRENT_JOBS = int(os.environ.get("MRI_MAX_CONCURRENT_JOBS", "1"))
 # than the old 15-model ensemble, but registration/skull-strip dominate the
 # wall clock either way — keep a generous default.
 MRI_INFERENCE_TIMEOUT = int(os.environ.get("MRI_INFERENCE_TIMEOUT", "1500"))
+
+# ── Upload staging (dedicated, private dir; never user-controlled names) ──────
+UPLOAD_DIR = os.path.join(WORK_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, mode=0o700, exist_ok=True)
+try:
+    os.chmod(UPLOAD_DIR, 0o700)
+except OSError:
+    pass

@@ -21,6 +21,8 @@ as long as each one is the right shape and covers a distinct orientation.
 """
 from __future__ import annotations
 import glob
+import hashlib
+import io
 import os
 
 import torch
@@ -37,6 +39,49 @@ class CheckpointError(RuntimeError):
     pass
 
 
+def _pinned_hashes() -> dict:
+    """{filename: sha256} from MRI_CHECKPOINT_SHA256 ("a.pt:<hex>,b.pt:<hex>") and/or the
+    SHA256SUMS file ("<hex>  <filename>" per line)."""
+    from api.core.config import MRI_CHECKPOINT_SHA256, MRI_CHECKPOINT_SHA256_FILE
+    pins: dict = {}
+    if os.path.isfile(MRI_CHECKPOINT_SHA256_FILE):
+        for line in open(MRI_CHECKPOINT_SHA256_FILE, encoding="utf-8").read().splitlines():
+            parts = line.split()
+            if len(parts) == 2 and not line.startswith("#"):
+                pins[os.path.basename(parts[1].lstrip("*"))] = parts[0].lower()
+    for item in filter(None, (x.strip() for x in MRI_CHECKPOINT_SHA256.split(","))):
+        name, _, digest = item.rpartition(":")
+        if name and digest:
+            pins[os.path.basename(name)] = digest.lower()
+    return pins
+
+
+def read_verified(path: str, pins: dict | None = None) -> bytes:
+    """Read the file ONCE, check its SHA-256 against the pinned list, and return the exact
+    bytes that were hashed (so there is no verify-then-reload TOCTOU window)."""
+    pins = _pinned_hashes() if pins is None else pins
+    name = os.path.basename(path)
+    expected = pins.get(name)
+    if not expected:
+        raise CheckpointError(f"{name} has no pinned SHA-256 (set MRI_CHECKPOINT_SHA256 or checkpoints/SHA256SUMS). "
+                              f"Refusing to load an unverified checkpoint.")
+    data = open(path, "rb").read()
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != expected:
+        raise CheckpointError(f"{name} SHA-256 mismatch (expected {expected[:12]}…, got {actual[:12]}…). "
+                              f"The file was modified or is not the pinned checkpoint.")
+    return data
+
+
+def verify_checkpoint_hashes() -> None:
+    """Called synchronously at app startup: raise (→ app refuses to start) on any mismatch or
+    unpinned *.pt present. No checkpoints at all is allowed (engine just reports not-ready)."""
+    paths = sorted(glob.glob(os.path.join(CHECKPOINT_DIR, "*.pt")))
+    pins = _pinned_hashes()
+    for p in paths:
+        read_verified(p, pins)
+
+
 def load_ensemble():
     """Returns a list of (model, axis, orientation, fold) tuples — exactly one
     per orientation. Raises CheckpointError with an actionable message if the
@@ -51,9 +96,12 @@ def load_ensemble():
             f"sagittal) into that folder — see checkpoints/README.md."
         )
 
+    pins = _pinned_hashes()
     by_orientation: dict[str, tuple] = {}
     for ckpt_path in ckpt_paths:
-        ckpt = torch.load(ckpt_path, map_location=DEVICE)
+        # weights_only=True: the pickle is restricted to tensors/primitive containers, so a
+        # tampered file cannot execute code. Bytes are hash-verified first (see read_verified).
+        ckpt = torch.load(io.BytesIO(read_verified(ckpt_path, pins)), map_location=DEVICE, weights_only=True)
         orientation = ckpt.get("orientation")
         if orientation not in ORIENTATIONS:
             logger.warning(
